@@ -32,6 +32,8 @@ pub struct ManagedWindow {
     pub close_anim_start: Option<Instant>,
     pub minimizing: bool,
     pub minimize_anim_start: Option<Instant>,
+    /// Which virtual desktop this window belongs to (0-based)
+    pub desktop: usize,
 }
 
 impl ManagedWindow {
@@ -40,7 +42,7 @@ impl ManagedWindow {
             open: true, minimized: false, maximized: false, snap: None,
             default_pos, default_size, restore_rect: None, id_epoch: 0,
             open_anim_start: None, closing: false, close_anim_start: None,
-            minimizing: false, minimize_anim_start: None,
+            minimizing: false, minimize_anim_start: None, desktop: 0,
         }
     }
 
@@ -317,6 +319,19 @@ mod tests {
         assert_eq!(r.left(), 720.0);
         assert_eq!(r.width(), 720.0);
         assert_eq!(r.top(), 34.0);
+    }
+
+    #[test]
+    fn desktop_defaults_to_zero() {
+        let w = ManagedWindow::new(Pos2::ZERO, Vec2::new(100.0, 100.0));
+        assert_eq!(w.desktop, 0);
+    }
+
+    #[test]
+    fn desktop_can_be_changed() {
+        let mut w = ManagedWindow::new(Pos2::ZERO, Vec2::new(100.0, 100.0));
+        w.desktop = 2;
+        assert_eq!(w.desktop, 2);
     }
 
     #[test]

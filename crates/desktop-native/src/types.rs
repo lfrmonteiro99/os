@@ -33,6 +33,17 @@ pub enum WindowKind {
 }
 
 impl WindowKind {
+    pub fn from_index(i: usize) -> Option<Self> {
+        match i {
+            0 => Some(Self::Overview), 1 => Some(Self::Terminal), 2 => Some(Self::FileManager),
+            3 => Some(Self::Controls), 4 => Some(Self::Messages), 5 => Some(Self::Browser),
+            6 => Some(Self::Calculator), 7 => Some(Self::Notes), 8 => Some(Self::MusicPlayer),
+            9 => Some(Self::Photos), 10 => Some(Self::Calendar), 11 => Some(Self::TextEditor),
+            12 => Some(Self::Settings), 13 => Some(Self::ProcessManager),
+            _ => None,
+        }
+    }
+
     pub fn title(self) -> &'static str {
         match self {
             Self::Overview => "System Overview",
@@ -239,6 +250,21 @@ mod tests {
         assert_eq!(WindowKind::TextEditor as usize, 11);
         assert_eq!(WindowKind::Settings as usize, 12);
         assert_eq!(WindowKind::ProcessManager as usize, 13);
+    }
+
+    #[test]
+    fn from_index_roundtrip() {
+        for i in 0..WINDOW_COUNT {
+            let kind = WindowKind::from_index(i);
+            assert!(kind.is_some(), "from_index({i}) should return Some");
+            assert_eq!(kind.unwrap() as usize, i);
+        }
+    }
+
+    #[test]
+    fn from_index_out_of_bounds() {
+        assert!(WindowKind::from_index(14).is_none());
+        assert!(WindowKind::from_index(999).is_none());
     }
 
     // ── DockIcon ─────────────────────────────────────────────────────

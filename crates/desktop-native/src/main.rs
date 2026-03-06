@@ -2368,10 +2368,14 @@ impl AuroraDesktopApp {
 
     // ── Settings ─────────────────────────────────────────────────────────────
 
+    fn accent_color(&self) -> Color32 {
+        Color32::from_rgb(self.app_settings.accent_r, self.app_settings.accent_g, self.app_settings.accent_b)
+    }
+
     fn content_settings(&mut self, ui: &mut egui::Ui) {
         let white = Color32::from_gray(230);
         let gray = Color32::from_gray(140);
-        let accent = Color32::from_rgb(0, 122, 255);
+        let accent = self.accent_color();
 
         egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
             ui.label(RichText::new("General").size(14.0).strong().color(white));
@@ -2424,6 +2428,54 @@ impl AuroraDesktopApp {
             ui.add_space(6.0);
 
             Self::toggle_row(ui, "Dark Mode", &mut self.app_settings.dark_mode, gray);
+            ui.add_space(4.0);
+
+            // Accent color picker
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Accent Color").size(12.0).color(gray));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let presets: &[(u8, u8, u8, &str)] = &[
+                        (0, 122, 255, "Blue"), (255, 59, 48, "Red"), (52, 199, 89, "Green"),
+                        (255, 149, 0, "Orange"), (175, 82, 222, "Purple"), (255, 45, 85, "Pink"),
+                    ];
+                    for &(r, g, b, _name) in presets.iter().rev() {
+                        let color = Color32::from_rgb(r, g, b);
+                        let is_selected = self.app_settings.accent_r == r && self.app_settings.accent_g == g && self.app_settings.accent_b == b;
+                        let size = if is_selected { 16.0 } else { 12.0 };
+                        let (dot_r, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+                        ui.painter().circle_filled(dot_r.center(), size / 2.0, color);
+                        if is_selected {
+                            ui.painter().circle_stroke(dot_r.center(), size / 2.0 + 1.5, Stroke::new(1.5, Color32::WHITE));
+                        }
+                        if ui.interact(dot_r, Id::new(("accent", r, g, b)), Sense::click()).clicked() {
+                            self.app_settings.accent_r = r;
+                            self.app_settings.accent_g = g;
+                            self.app_settings.accent_b = b;
+                        }
+                    }
+                });
+            });
+            ui.add_space(4.0);
+
+            // Custom wallpaper
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Custom Wallpaper").size(12.0).color(gray));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if !self.app_settings.custom_wallpaper.is_empty() {
+                        if ui.add(egui::Button::new(RichText::new("Clear").size(10.0).color(Color32::from_gray(180)))
+                            .fill(Color32::TRANSPARENT).stroke(Stroke::NONE)).clicked()
+                        {
+                            self.app_settings.custom_wallpaper.clear();
+                        }
+                    }
+                    let path_display = if self.app_settings.custom_wallpaper.is_empty() {
+                        "None (built-in)"
+                    } else {
+                        &self.app_settings.custom_wallpaper
+                    };
+                    ui.label(RichText::new(path_display).size(10.0).color(Color32::from_gray(120)));
+                });
+            });
 
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Show FPS Overlay").size(12.0).color(gray));
@@ -2723,6 +2775,8 @@ impl AuroraDesktopApp {
             let win_ref = self.window_ref(kind);
             let snap = win_ref.snapshot();
             if !snap.open || snap.minimized { continue; }
+            // Only show windows on the current desktop
+            if win_ref.desktop != self.current_desktop { continue; }
 
             // Animation alpha/scale
             let anim_alpha = win_ref.anim_alpha();
@@ -3180,21 +3234,59 @@ impl AuroraDesktopApp {
                     .inner_margin(egui::Margin::symmetric(14, 14))
                     .show(ui, |ui| {
                         ui.set_min_width(300.0);
+                        let accent = self.accent_color();
                         egui::Grid::new("cc_toggles").num_columns(2).spacing(Vec2::new(8.0, 8.0)).show(ui, |ui| {
-                            let toggles: &mut [(&str, &mut bool)] = &mut [
-                                ("Wi-Fi", &mut self.cc_wifi), ("Bluetooth", &mut self.cc_bluetooth),
-                                ("AirDrop", &mut self.cc_airdrop), ("Focus", &mut self.cc_focus),
-                            ];
-                            for (i, (label, active)) in toggles.iter_mut().enumerate() {
-                                let fill = if **active { Color32::from_rgb(0, 122, 255) } else { Color32::from_rgba_unmultiplied(255, 255, 255, 25) };
-                                if ui.add(egui::Button::new(RichText::new(*label).size(12.0).color(Color32::WHITE))
-                                    .min_size(Vec2::new(140.0, 55.0)).fill(fill)
-                                    .stroke(Stroke::new(0.5, Color32::from_white_alpha(40)))
-                                    .corner_radius(CornerRadius::same(10))).clicked() {
-                                    **active = !**active;
-                                }
-                                if i % 2 == 1 { ui.end_row(); }
+                            // Wi-Fi with real network name
+                            let wifi_label = if self.cc_wifi && self.sysinfo.network_up {
+                                format!("Wi-Fi\n{}", self.sysinfo.network_name)
+                            } else { "Wi-Fi".to_string() };
+                            let wifi_fill = if self.cc_wifi { accent } else { Color32::from_rgba_unmultiplied(255, 255, 255, 25) };
+                            if ui.add(egui::Button::new(RichText::new(wifi_label).size(11.0).color(Color32::WHITE))
+                                .min_size(Vec2::new(140.0, 55.0)).fill(wifi_fill)
+                                .stroke(Stroke::new(0.5, Color32::from_white_alpha(40)))
+                                .corner_radius(CornerRadius::same(10))).clicked() {
+                                self.cc_wifi = !self.cc_wifi;
                             }
+
+                            let bt_fill = if self.cc_bluetooth { accent } else { Color32::from_rgba_unmultiplied(255, 255, 255, 25) };
+                            if ui.add(egui::Button::new(RichText::new("Bluetooth").size(12.0).color(Color32::WHITE))
+                                .min_size(Vec2::new(140.0, 55.0)).fill(bt_fill)
+                                .stroke(Stroke::new(0.5, Color32::from_white_alpha(40)))
+                                .corner_radius(CornerRadius::same(10))).clicked() {
+                                self.cc_bluetooth = !self.cc_bluetooth;
+                            }
+                            ui.end_row();
+
+                            let ad_fill = if self.cc_airdrop { accent } else { Color32::from_rgba_unmultiplied(255, 255, 255, 25) };
+                            if ui.add(egui::Button::new(RichText::new("AirDrop").size(12.0).color(Color32::WHITE))
+                                .min_size(Vec2::new(140.0, 55.0)).fill(ad_fill)
+                                .stroke(Stroke::new(0.5, Color32::from_white_alpha(40)))
+                                .corner_radius(CornerRadius::same(10))).clicked() {
+                                self.cc_airdrop = !self.cc_airdrop;
+                            }
+
+                            let focus_fill = if self.cc_focus { accent } else { Color32::from_rgba_unmultiplied(255, 255, 255, 25) };
+                            if ui.add(egui::Button::new(RichText::new("Focus").size(12.0).color(Color32::WHITE))
+                                .min_size(Vec2::new(140.0, 55.0)).fill(focus_fill)
+                                .stroke(Stroke::new(0.5, Color32::from_white_alpha(40)))
+                                .corner_radius(CornerRadius::same(10))).clicked() {
+                                self.cc_focus = !self.cc_focus;
+                            }
+                            ui.end_row();
+                        });
+
+                        // Real system stats
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            let batt_str = if self.sysinfo.battery_available {
+                                let icon = if self.sysinfo.battery_charging { "⚡" } else { "🔋" };
+                                format!("{icon} {:.0}%", self.sysinfo.battery_pct)
+                            } else {
+                                "AC Power".to_string()
+                            };
+                            ui.label(RichText::new(batt_str).size(11.0).color(Color32::from_gray(180)));
+                            ui.label(RichText::new(format!("CPU {:.0}%", self.sysinfo.cpu_usage)).size(11.0).color(Color32::from_gray(140)));
+                            ui.label(RichText::new(format!("RAM {:.0}%", self.sysinfo.memory_pct)).size(11.0).color(Color32::from_gray(140)));
                         });
                         ui.add_space(10.0);
                         ui.horizontal(|ui| {
@@ -3765,9 +3857,9 @@ impl AuroraDesktopApp {
                 });
             });
 
-        // Show all open windows as thumbnails
+        // Show windows on the current desktop as thumbnails
         let open_windows: Vec<WindowKind> = self.z_order.iter().copied()
-            .filter(|k| { let w = self.window_ref(*k); w.open && !w.minimized })
+            .filter(|k| { let w = self.window_ref(*k); w.open && !w.minimized && w.desktop == self.current_desktop })
             .collect();
 
         if open_windows.is_empty() { return; }
@@ -3818,9 +3910,21 @@ impl AuroraDesktopApp {
                             let (content_r, _) = ui.allocate_exact_size(Vec2::new(thumb_w - 32.0, thumb_h - 44.0), Sense::hover());
                             ui.painter().rect_filled(content_r, CornerRadius::same(4), Color32::from_rgba_unmultiplied(30, 30, 40, alpha));
                         }).response;
-                    if resp.interact(Sense::click()).clicked() {
+                    let interact_resp = resp.interact(Sense::click());
+                    if interact_resp.clicked() {
                         clicked_window = Some(*kind);
                     }
+                    // Right-click to move window to another desktop
+                    interact_resp.context_menu(|ui| {
+                        for d in 0..self.desktop_count {
+                            if d != self.current_desktop {
+                                if ui.button(format!("Move to Desktop {}", d + 1)).clicked() {
+                                    self.window_mut(*kind).desktop = d;
+                                    ui.close();
+                                }
+                            }
+                        }
+                    });
 
                     // Window title below thumbnail
                     ui.label(RichText::new(kind.title()).size(11.0).color(Color32::from_rgba_unmultiplied(220, 220, 220, (255.0 * t) as u8)));
@@ -3924,6 +4028,15 @@ impl AuroraDesktopApp {
             window_rects.join(",")
         );
         let _ = fs::write(Self::state_file_path(), json);
+        // Save open windows and z-order
+        let open_indices: Vec<String> = (0..WINDOW_COUNT)
+            .filter(|i| self.windows[*i].open)
+            .map(|i| i.to_string())
+            .collect();
+        let z_indices: Vec<String> = self.z_order.iter()
+            .map(|k| (*k as usize).to_string())
+            .collect();
+
         // Also persist AppSettings
         self.app_settings.wallpaper_idx = self.wallpaper_idx;
         self.app_settings.volume = self.cc_volume;
@@ -3931,6 +4044,8 @@ impl AuroraDesktopApp {
         self.app_settings.wifi_enabled = self.cc_wifi;
         self.app_settings.bluetooth_enabled = self.cc_bluetooth;
         self.app_settings.airdrop_enabled = self.cc_airdrop;
+        self.app_settings.open_windows = open_indices.join(",");
+        self.app_settings.z_order = z_indices.join(",");
         let _ = self.app_settings.save();
     }
 
@@ -3959,6 +4074,35 @@ impl AuroraDesktopApp {
                     let notes = content[start..end].replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
                     self.notes_text = notes;
                 }
+            }
+        }
+
+        // Restore open windows and z-order from AppSettings
+        if !self.app_settings.open_windows.is_empty() {
+            // Close all windows first
+            for i in 0..WINDOW_COUNT {
+                self.windows[i].open = false;
+            }
+            // Open saved windows
+            for idx_str in self.app_settings.open_windows.split(',') {
+                if let Ok(idx) = idx_str.trim().parse::<usize>() {
+                    if idx < WINDOW_COUNT {
+                        self.windows[idx].open = true;
+                    }
+                }
+            }
+        }
+        if !self.app_settings.z_order.is_empty() {
+            let mut new_z = Vec::new();
+            for idx_str in self.app_settings.z_order.split(',') {
+                if let Ok(idx) = idx_str.trim().parse::<usize>() {
+                    if let Some(kind) = WindowKind::from_index(idx) {
+                        new_z.push(kind);
+                    }
+                }
+            }
+            if new_z.len() == WINDOW_COUNT {
+                self.z_order = new_z;
             }
         }
     }
@@ -4268,7 +4412,14 @@ impl eframe::App for AuroraDesktopApp {
                                 self.toasts.push(Toast::new("File Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
                             }
                         } else {
-                            open_file_with_system(&pb);
+                            // Image files: offer as wallpaper
+                            let ext = pb.extension().and_then(|e| e.to_str()).unwrap_or("");
+                            if matches!(ext, "png" | "jpg" | "jpeg" | "bmp") {
+                                self.app_settings.custom_wallpaper = pb.to_string_lossy().to_string();
+                                self.notification_center.notify("System", "Wallpaper set", &pb.to_string_lossy(), Color32::from_rgb(52, 199, 89));
+                            } else {
+                                open_file_with_system(&pb);
+                            }
                             self.toasts.push(Toast::new("File Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
                         }
                     }

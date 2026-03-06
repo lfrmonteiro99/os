@@ -16,6 +16,16 @@ pub struct AppSettings {
     pub dock_magnification: bool,
     pub dock_icon_size: f32,
     pub dark_mode: bool,
+    /// Accent color RGB (default: macOS blue 0,122,255)
+    pub accent_r: u8,
+    pub accent_g: u8,
+    pub accent_b: u8,
+    /// Custom wallpaper file path (empty = use built-in)
+    pub custom_wallpaper: String,
+    /// Which windows were open on last quit (comma-separated indices)
+    pub open_windows: String,
+    /// Z-order of windows (comma-separated indices, front-to-back)
+    pub z_order: String,
 }
 
 impl Default for AppSettings {
@@ -35,6 +45,12 @@ impl Default for AppSettings {
             dock_magnification: true,
             dock_icon_size: 48.0,
             dark_mode: false,
+            accent_r: 0,
+            accent_g: 122,
+            accent_b: 255,
+            custom_wallpaper: String::new(),
+            open_windows: String::new(),
+            z_order: String::new(),
         }
     }
 }
@@ -90,14 +106,21 @@ impl AppSettings {
                 "  \"show_fps\": {},\n",
                 "  \"dock_magnification\": {},\n",
                 "  \"dock_icon_size\": {:.1},\n",
-                "  \"dark_mode\": {}\n",
+                "  \"dark_mode\": {},\n",
+                "  \"accent_r\": {},\n",
+                "  \"accent_g\": {},\n",
+                "  \"accent_b\": {},\n",
+                "  \"custom_wallpaper\": \"{}\",\n",
+                "  \"open_windows\": \"{}\",\n",
+                "  \"z_order\": \"{}\"\n",
                 "}}"
             ),
             self.wallpaper_idx, self.volume, self.brightness,
             self.wifi_enabled, self.bluetooth_enabled, self.airdrop_enabled,
             self.focus_mode, self.use_real_terminal, self.auto_save_interval_secs,
             self.font_size, self.show_fps, self.dock_magnification, self.dock_icon_size,
-            self.dark_mode,
+            self.dark_mode, self.accent_r, self.accent_g, self.accent_b,
+            self.custom_wallpaper, self.open_windows, self.z_order,
         )
     }
 
@@ -117,6 +140,12 @@ impl AppSettings {
         if let Some(v) = parse_json_bool(json, "dock_magnification") { s.dock_magnification = v; }
         if let Some(v) = parse_json_f32(json, "dock_icon_size") { s.dock_icon_size = v; }
         if let Some(v) = parse_json_bool(json, "dark_mode") { s.dark_mode = v; }
+        if let Some(v) = parse_json_usize(json, "accent_r") { s.accent_r = v as u8; }
+        if let Some(v) = parse_json_usize(json, "accent_g") { s.accent_g = v as u8; }
+        if let Some(v) = parse_json_usize(json, "accent_b") { s.accent_b = v as u8; }
+        if let Some(v) = parse_json_string(json, "custom_wallpaper") { s.custom_wallpaper = v; }
+        if let Some(v) = parse_json_string(json, "open_windows") { s.open_windows = v; }
+        if let Some(v) = parse_json_string(json, "z_order") { s.z_order = v; }
         s.clamp();
         s
     }
@@ -140,6 +169,16 @@ fn parse_json_usize(json: &str, key: &str) -> Option<usize> {
         .next()?
         .parse()
         .ok()
+}
+
+fn parse_json_string(json: &str, key: &str) -> Option<String> {
+    let pattern = format!("\"{}\":", key);
+    let idx = json.find(&pattern)?;
+    let rest = json[idx + pattern.len()..].trim();
+    if !rest.starts_with('"') { return None; }
+    let inner = &rest[1..];
+    let end = inner.find('"')?;
+    Some(inner[..end].to_string())
 }
 
 fn parse_json_bool(json: &str, key: &str) -> Option<bool> {
@@ -335,5 +374,77 @@ mod tests {
         let path = AppSettings::settings_path();
         assert!(!path.to_string_lossy().is_empty());
         assert!(path.to_string_lossy().contains("aurora_settings"));
+    }
+
+    // ── accent color ─────────────────────────────────────────────────
+
+    #[test]
+    fn accent_color_defaults_blue() {
+        let s = AppSettings::default();
+        assert_eq!((s.accent_r, s.accent_g, s.accent_b), (0, 122, 255));
+    }
+
+    #[test]
+    fn accent_color_roundtrip() {
+        let mut s = AppSettings::default();
+        s.accent_r = 255;
+        s.accent_g = 59;
+        s.accent_b = 48;
+        let json = s.to_json();
+        let parsed = AppSettings::from_json(&json);
+        assert_eq!((parsed.accent_r, parsed.accent_g, parsed.accent_b), (255, 59, 48));
+    }
+
+    // ── custom wallpaper ────────────────────────────────────────────
+
+    #[test]
+    fn custom_wallpaper_default_empty() {
+        let s = AppSettings::default();
+        assert!(s.custom_wallpaper.is_empty());
+    }
+
+    #[test]
+    fn custom_wallpaper_roundtrip() {
+        let mut s = AppSettings::default();
+        s.custom_wallpaper = "C:/wallpapers/sunset.png".to_string();
+        let json = s.to_json();
+        let parsed = AppSettings::from_json(&json);
+        assert_eq!(parsed.custom_wallpaper, "C:/wallpapers/sunset.png");
+    }
+
+    // ── window restore ──────────────────────────────────────────────
+
+    #[test]
+    fn open_windows_default_empty() {
+        let s = AppSettings::default();
+        assert!(s.open_windows.is_empty());
+    }
+
+    #[test]
+    fn open_windows_roundtrip() {
+        let mut s = AppSettings::default();
+        s.open_windows = "0,2,4,7".to_string();
+        s.z_order = "7,4,2,0".to_string();
+        let json = s.to_json();
+        let parsed = AppSettings::from_json(&json);
+        assert_eq!(parsed.open_windows, "0,2,4,7");
+        assert_eq!(parsed.z_order, "7,4,2,0");
+    }
+
+    // ── parse_json_string ───────────────────────────────────────────
+
+    #[test]
+    fn parse_json_string_works() {
+        assert_eq!(parse_json_string(r#"{"path": "hello"}"#, "path"), Some("hello".to_string()));
+    }
+
+    #[test]
+    fn parse_json_string_empty() {
+        assert_eq!(parse_json_string(r#"{"path": ""}"#, "path"), Some("".to_string()));
+    }
+
+    #[test]
+    fn parse_json_string_missing() {
+        assert_eq!(parse_json_string(r#"{"other": "x"}"#, "path"), None);
     }
 }
