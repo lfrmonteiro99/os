@@ -1,0 +1,311 @@
+use std::time::Duration;
+use eframe::egui::Color32;
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+pub const POLL_EVERY: Duration = Duration::from_millis(900);
+pub const SYSINFO_INTERVAL: Duration = Duration::from_secs(2);
+pub const MENU_BAR_HEIGHT: f32 = 34.0;
+pub const DOCK_HEIGHT: f32 = 96.0;
+pub const DOCK_ICON_BASE: f32 = 48.0;
+pub const DOCK_ICON_MAX_SCALE: f32 = 1.35;
+pub const DOCK_EFFECT_DIST: f32 = 120.0;
+pub const WINDOW_COUNT: usize = 14;
+
+// ── Window types ─────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum WindowKind {
+    Overview = 0,
+    Terminal = 1,
+    FileManager = 2,
+    Controls = 3,
+    Messages = 4,
+    Browser = 5,
+    Calculator = 6,
+    Notes = 7,
+    MusicPlayer = 8,
+    Photos = 9,
+    Calendar = 10,
+    TextEditor = 11,
+    Settings = 12,
+    ProcessManager = 13,
+}
+
+impl WindowKind {
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Overview => "System Overview",
+            Self::Terminal => "Terminal",
+            Self::FileManager => "Files",
+            Self::Controls => "Quick Controls",
+            Self::Messages => "Messages",
+            Self::Browser => "Browser",
+            Self::Calculator => "Calculator",
+            Self::Notes => "Notes",
+            Self::MusicPlayer => "Music",
+            Self::Photos => "Photos",
+            Self::Calendar => "Calendar",
+            Self::TextEditor => "TextEdit",
+            Self::Settings => "Settings",
+            Self::ProcessManager => "Activity Monitor",
+        }
+    }
+}
+
+// ── Dock icon types ──────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DockIcon {
+    Files,
+    Terminal,
+    Browser,
+    Overview,
+    Mail,
+    Messages,
+    Notes,
+    Calendar,
+    Music,
+    Photos,
+    Calculator,
+    Settings,
+    Store,
+    Separator,
+    Controls,
+    Info,
+}
+
+impl DockIcon {
+    pub fn all() -> &'static [Self] {
+        &[
+            Self::Files, Self::Terminal, Self::Browser, Self::Messages,
+            Self::Overview, Self::Mail, Self::Notes, Self::Calendar,
+            Self::Music, Self::Photos, Self::Calculator, Self::Settings,
+            Self::Store, Self::Separator, Self::Controls, Self::Info,
+        ]
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Files => "Files",
+            Self::Terminal => "Terminal",
+            Self::Browser => "Browser",
+            Self::Overview => "System Overview",
+            Self::Mail => "Mail",
+            Self::Messages => "Messages",
+            Self::Notes => "Notes",
+            Self::Calendar => "Calendar",
+            Self::Music => "Music",
+            Self::Photos => "Photos",
+            Self::Calculator => "Calculator",
+            Self::Settings => "Settings",
+            Self::Store => "App Store",
+            Self::Separator => "",
+            Self::Controls => "Quick Controls",
+            Self::Info => "System Info",
+        }
+    }
+
+    pub fn bg_color(self) -> Color32 {
+        match self {
+            Self::Files => Color32::from_rgb(0, 122, 255),
+            Self::Terminal => Color32::from_rgb(30, 30, 46),
+            Self::Browser => Color32::from_rgb(0, 180, 216),
+            Self::Overview => Color32::from_rgb(52, 199, 89),
+            Self::Mail => Color32::from_rgb(88, 86, 214),
+            Self::Messages => Color32::from_rgb(76, 217, 100),
+            Self::Notes => Color32::from_rgb(255, 214, 10),
+            Self::Calendar => Color32::WHITE,
+            Self::Music => Color32::from_rgb(255, 55, 95),
+            Self::Photos => Color32::from_rgb(255, 107, 107),
+            Self::Calculator => Color32::from_rgb(255, 149, 0),
+            Self::Settings => Color32::from_rgb(142, 142, 147),
+            Self::Store => Color32::from_rgb(0, 122, 255),
+            Self::Separator => Color32::TRANSPARENT,
+            Self::Controls => Color32::from_rgb(88, 86, 214),
+            Self::Info => Color32::from_rgb(175, 82, 222),
+        }
+    }
+
+    pub fn window_kind(self) -> Option<WindowKind> {
+        match self {
+            Self::Files => Some(WindowKind::FileManager),
+            Self::Terminal => Some(WindowKind::Terminal),
+            Self::Overview => Some(WindowKind::Overview),
+            Self::Controls => Some(WindowKind::Controls),
+            Self::Messages => Some(WindowKind::Messages),
+            Self::Browser => Some(WindowKind::Browser),
+            Self::Calculator => Some(WindowKind::Calculator),
+            Self::Notes => Some(WindowKind::Notes),
+            Self::Music => Some(WindowKind::MusicPlayer),
+            Self::Photos => Some(WindowKind::Photos),
+            Self::Calendar => Some(WindowKind::Calendar),
+            Self::Settings => Some(WindowKind::Settings),
+            Self::Info => Some(WindowKind::ProcessManager),
+            _ => None,
+        }
+    }
+
+    pub fn is_separator(self) -> bool {
+        matches!(self, Self::Separator)
+    }
+}
+
+// ── Menu ─────────────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MenuDropdown {
+    File, Edit, View, Window, Help,
+}
+
+impl MenuDropdown {
+    pub fn label(self) -> &'static str {
+        match self { Self::File => "File", Self::Edit => "Edit", Self::View => "View", Self::Window => "Window", Self::Help => "Help" }
+    }
+
+    pub fn items(self) -> &'static [&'static str] {
+        match self {
+            Self::File => &["New Window", "Open...", "Save", "---", "Close Window  Ctrl+W", "---", "Quit  Ctrl+Q"],
+            Self::Edit => &["Undo  Ctrl+Z", "Redo  Ctrl+Y", "---", "Cut  Ctrl+X", "Copy  Ctrl+C", "Paste  Ctrl+V", "---", "Select All  Ctrl+A"],
+            Self::View => &["Enter Full Screen", "---", "Show Sidebar", "Show Status Bar"],
+            Self::Window => &["Minimize  Ctrl+M", "Zoom", "---", "Tile Left", "Tile Right", "---", "Bring All to Front"],
+            Self::Help => &["AuroraOS Help", "---", "About AuroraOS"],
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MenuAction {
+    Quit,
+    CloseWindow,
+    Minimize,
+    Maximize,
+    TileLeft,
+    TileRight,
+    BringAllToFront,
+    Copy,
+    Cut,
+    Paste,
+    SelectAll,
+    Undo,
+    Redo,
+    Save,
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Constants ────────────────────────────────────────────────────
+
+    #[test]
+    fn constants_are_reasonable() {
+        assert!(MENU_BAR_HEIGHT > 0.0);
+        assert!(DOCK_HEIGHT > 0.0);
+        assert!(DOCK_ICON_BASE > 0.0);
+        assert!(DOCK_ICON_MAX_SCALE > 1.0);
+        assert!(DOCK_EFFECT_DIST > 0.0);
+        assert!(POLL_EVERY.as_millis() > 0);
+        assert!(SYSINFO_INTERVAL.as_secs() > 0);
+    }
+
+    // ── WindowKind ───────────────────────────────────────────────────
+
+    #[test]
+    fn window_kind_titles_nonempty() {
+        let kinds = [
+            WindowKind::Overview, WindowKind::Terminal, WindowKind::FileManager,
+            WindowKind::Controls, WindowKind::Messages, WindowKind::Browser,
+            WindowKind::Calculator, WindowKind::Notes, WindowKind::MusicPlayer,
+            WindowKind::Photos, WindowKind::Calendar, WindowKind::TextEditor,
+            WindowKind::Settings, WindowKind::ProcessManager,
+        ];
+        for kind in kinds {
+            assert!(!kind.title().is_empty(), "{kind:?} has empty title");
+        }
+    }
+
+    #[test]
+    fn window_count_matches_enum() {
+        assert_eq!(WINDOW_COUNT, 14);
+        assert_eq!(WindowKind::ProcessManager as usize, WINDOW_COUNT - 1);
+    }
+
+    #[test]
+    fn window_kind_indices_are_contiguous() {
+        assert_eq!(WindowKind::Overview as usize, 0);
+        assert_eq!(WindowKind::Terminal as usize, 1);
+        assert_eq!(WindowKind::TextEditor as usize, 11);
+        assert_eq!(WindowKind::Settings as usize, 12);
+        assert_eq!(WindowKind::ProcessManager as usize, 13);
+    }
+
+    // ── DockIcon ─────────────────────────────────────────────────────
+
+    #[test]
+    fn dock_icon_all_has_items() {
+        assert!(DockIcon::all().len() >= 10);
+    }
+
+    #[test]
+    fn dock_icon_separator_has_no_window() {
+        assert!(DockIcon::Separator.window_kind().is_none());
+        assert!(DockIcon::Separator.is_separator());
+    }
+
+    #[test]
+    fn dock_icon_files_maps_to_file_manager() {
+        assert_eq!(DockIcon::Files.window_kind(), Some(WindowKind::FileManager));
+    }
+
+    #[test]
+    fn dock_icon_labels_nonempty_except_separator() {
+        for icon in DockIcon::all() {
+            if !icon.is_separator() {
+                assert!(!icon.label().is_empty(), "{icon:?} has empty label");
+            }
+        }
+    }
+
+    #[test]
+    fn dock_icon_bg_colors_not_all_same() {
+        let colors: Vec<_> = DockIcon::all().iter()
+            .filter(|i| !i.is_separator())
+            .map(|i| i.bg_color())
+            .collect();
+        // At least 5 distinct colors
+        let mut unique = colors.clone();
+        unique.dedup();
+        assert!(unique.len() >= 5, "dock icons should have diverse colors");
+    }
+
+    // ── MenuDropdown ─────────────────────────────────────────────────
+
+    #[test]
+    fn menu_dropdown_labels_nonempty() {
+        let menus = [MenuDropdown::File, MenuDropdown::Edit, MenuDropdown::View, MenuDropdown::Window, MenuDropdown::Help];
+        for m in menus {
+            assert!(!m.label().is_empty());
+        }
+    }
+
+    #[test]
+    fn menu_dropdown_items_nonempty() {
+        let menus = [MenuDropdown::File, MenuDropdown::Edit, MenuDropdown::View, MenuDropdown::Window, MenuDropdown::Help];
+        for m in menus {
+            assert!(!m.items().is_empty(), "{m:?} has no items");
+        }
+    }
+
+    #[test]
+    fn menu_file_has_quit() {
+        assert!(MenuDropdown::File.items().iter().any(|i| i.contains("Quit")));
+    }
+
+    #[test]
+    fn menu_window_has_minimize() {
+        assert!(MenuDropdown::Window.items().iter().any(|i| i.contains("Minimize")));
+    }
+
+}

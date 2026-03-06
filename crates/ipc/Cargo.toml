@@ -1,0 +1,9 @@
+[package]
+name = "ipc"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "ipc"
+path = "src/lib.rs"

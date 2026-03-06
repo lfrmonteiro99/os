@@ -1,0 +1,13 @@
+[package]
+name = "control-plane"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+ipc = { path = "../ipc" }
+svc-manager = { path = "../svc-manager" }
+
+[lib]
+name = "control_plane"
+path = "src/lib.rs"

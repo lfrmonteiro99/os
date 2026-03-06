@@ -1,0 +1,956 @@
+/* ========================================================
+   AuroraOS Desktop — macOS Big Sur
+   Pixel-perfect recreation with CSS-only icons & effects
+   ======================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
+
+:root {
+  --font-stack: "DM Sans", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+  --menubar-h: 25px;
+  --ink: #1d1d1f;
+  --ink-secondary: #86868b;
+  --window-bg: rgba(246, 246, 246, 0.92);
+  --window-radius: 12px;
+  --blue: #007aff;
+  --green: #34c759;
+  --red: #ff3b30;
+  --orange: #ff9500;
+  --yellow: #ffcc00;
+  --purple: #af52de;
+  --teal: #5ac8fa;
+  --dock-height: 62px;
+}
+
+/* Reset */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  font-family: var(--font-stack);
+  font-size: 13px;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  cursor: default;
+}
+
+/* ── Wallpaper ─────────────────────────────────────── */
+.wallpaper {
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    /* Sky gradient — Big Sur sunset */
+    linear-gradient(
+      180deg,
+      #0f1b3e 0%,
+      #1a2b5e 8%,
+      #2c3e7a 16%,
+      #3d4a8a 24%,
+      #5a4a85 32%,
+      #7a4a75 40%,
+      #a04a65 48%,
+      #c85858 55%,
+      #e07050 62%,
+      #f09048 68%,
+      #f5a840 74%,
+      #f5c038 80%,
+      #e8a040 86%,
+      #c07050 92%,
+      #4a2838 100%
+    );
+}
+
+.wallpaper-hills {
+  position: absolute; inset: 0;
+  /* Multi-layered hill silhouettes */
+  background:
+    /* Foreground hill — dark */
+    radial-gradient(ellipse 140% 35% at 50% 108%, #08101d 0%, #08101d 50%, transparent 50.5%),
+    /* Mid-left hill */
+    radial-gradient(ellipse 70% 28% at 22% 104%, #141e38 0%, #141e38 50%, transparent 50.5%),
+    /* Mid-right hill */
+    radial-gradient(ellipse 80% 30% at 80% 106%, #1a2440 0%, #1a2440 50%, transparent 50.5%),
+    /* Back hill center */
+    radial-gradient(ellipse 130% 24% at 48% 96%, #2a2555 0%, #2a2555 50%, transparent 50.5%),
+    /* Distant ridge */
+    radial-gradient(ellipse 160% 18% at 55% 90%, #3d3068 0%, #3d3068 50%, transparent 50.5%),
+    /* Warm horizon glow */
+    radial-gradient(ellipse 90% 30% at 52% 82%, rgba(255, 160, 60, 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 70% 22% at 35% 78%, rgba(255, 100, 80, 0.35) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 18% at 68% 76%, rgba(255, 200, 100, 0.3) 0%, transparent 50%);
+}
+
+/* ── Menu Bar ──────────────────────────────────────── */
+.menu-bar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--menubar-h);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 8px;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: saturate(200%) blur(25px);
+  -webkit-backdrop-filter: saturate(200%) blur(25px);
+  z-index: 100;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.menu-left, .menu-right {
+  display: flex; align-items: center; gap: 0;
+}
+
+.menu-item, .menu-icon, .menu-clock {
+  padding: 1px 10px;
+  border-radius: 4px;
+  cursor: default;
+  line-height: var(--menubar-h);
+  white-space: nowrap;
+  display: flex; align-items: center;
+}
+
+.menu-item:hover, .menu-icon:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.menu-item.bold { font-weight: 600; }
+.menu-item.apple-logo { padding: 1px 8px; }
+
+.menu-clock {
+  min-width: 145px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+}
+
+.menu-icon { cursor: pointer; gap: 4px; }
+.battery-icon { padding: 1px 6px; }
+
+/* ── Window Base ───────────────────────────────────── */
+.window {
+  position: absolute;
+  border-radius: var(--window-radius);
+  background: var(--window-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.06),
+    0 3px 8px rgba(0, 0, 0, 0.08),
+    0 12px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: box-shadow 0.2s ease;
+  animation: windowOpen 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes windowOpen {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.window.focused {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.1),
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 22px 70px rgba(0, 0, 0, 0.25);
+}
+
+.window-titlebar {
+  height: 52px; min-height: 52px;
+  display: flex; align-items: center;
+  padding: 0 16px;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  position: relative;
+  cursor: default;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.window-title {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-size: 13px; font-weight: 600;
+  color: var(--ink);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.window-content { flex: 1; overflow: hidden; }
+
+/* Traffic lights */
+.traffic-lights {
+  display: flex; gap: 8px; z-index: 1;
+}
+
+.tl-btn {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  position: relative;
+  cursor: pointer;
+  transition: filter 0.1s;
+}
+
+.tl-btn:hover { filter: brightness(0.88); }
+
+.tl-close { background: #ff5f57; }
+.tl-minimize { background: #febc2e; }
+.tl-maximize { background: #28c840; }
+
+/* Traffic light icons on hover */
+.traffic-lights:hover .tl-close::after {
+  content: "\00D7"; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: rgba(0,0,0,0.5);
+  line-height: 1;
+}
+.traffic-lights:hover .tl-minimize::after {
+  content: "\2013"; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: rgba(0,0,0,0.5);
+  line-height: 1;
+}
+.traffic-lights:hover .tl-maximize::after {
+  content: ""; position: absolute; inset: 3px;
+  border: 1.2px solid rgba(0,0,0,0.5);
+  border-radius: 0;
+  /* Two small diagonal arrows */
+}
+
+/* ── Window: Maps ──────────────────────────────────── */
+.maps-content {
+  display: flex; height: 100%;
+}
+
+.maps-sidebar {
+  width: 170px; min-width: 170px;
+  background: rgba(236, 236, 236, 0.95);
+  border-right: 0.5px solid rgba(0, 0, 0, 0.06);
+  display: flex; flex-direction: column;
+}
+
+.maps-search { padding: 8px; }
+
+.maps-search input {
+  width: 100%; height: 26px;
+  border: none; border-radius: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0 8px;
+  font-size: 11.5px; font-family: var(--font-stack);
+  color: var(--ink-secondary); outline: none;
+}
+
+.maps-places {
+  list-style: none; overflow-y: auto; flex: 1;
+}
+
+.maps-places li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 12px;
+  font-size: 12px; color: var(--ink);
+  cursor: default; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  border-radius: 4px;
+  margin: 0 4px;
+}
+
+.maps-places li:hover { background: rgba(0, 0, 0, 0.05); }
+
+.place-dot {
+  width: 8px; height: 8px; min-width: 8px;
+  border-radius: 50%;
+}
+
+.maps-main {
+  flex: 1; position: relative;
+  background:
+    radial-gradient(ellipse at 30% 40%, #a8d8ea 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 60%, #b8e6c8 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 80%, #c5e8b0 0%, transparent 50%),
+    linear-gradient(180deg, #d4edda 0%, #aed9c8 40%, #8ec5a8 70%, #b5d9a8 100%);
+  /* Fake road lines */
+  background-image:
+    linear-gradient(rgba(200,200,200,0.4) 0%, rgba(200,200,200,0.4) 100%),
+    linear-gradient(rgba(200,200,200,0.3) 0%, rgba(200,200,200,0.3) 100%),
+    radial-gradient(ellipse at 30% 40%, #a8d8ea 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 60%, #b8e6c8 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 80%, #c5e8b0 0%, transparent 50%),
+    linear-gradient(180deg, #d4edda 0%, #aed9c8 40%, #8ec5a8 70%, #b5d9a8 100%);
+  background-size:
+    2px 100%, 100% 2px,
+    100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  background-position:
+    45% 0, 0 55%,
+    0 0, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat;
+}
+
+.maps-pin {
+  position: absolute;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+  transform: translate(-50%, -100%);
+}
+
+/* ── Window: Safari ────────────────────────────────── */
+.safari-titlebar {
+  gap: 10px;
+}
+
+.safari-nav-btns {
+  display: flex; gap: 6px; margin-left: 8px;
+}
+
+.safari-address-bar {
+  flex: 1; height: 28px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  gap: 5px;
+  font-size: 12px; color: var(--ink-secondary);
+}
+
+.safari-titlebar-spacer { width: 50px; }
+
+.safari-content {
+  padding: 24px 28px;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.safari-section-title {
+  font-size: 22px; font-weight: 700;
+  color: var(--ink); margin-bottom: 20px;
+  letter-spacing: -0.02em;
+}
+
+.safari-favorites-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 80px);
+  gap: 20px;
+  justify-content: start;
+}
+
+.safari-fav {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 7px;
+  cursor: default;
+  transition: transform 0.12s;
+}
+
+.safari-fav:hover { transform: scale(1.06); }
+
+.safari-fav-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700; color: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+
+.safari-fav-google {
+  background: conic-gradient(from 0deg, #4285f4 0deg, #ea4335 90deg, #fbbc05 180deg, #34a853 270deg, #4285f4 360deg);
+}
+
+.safari-fav span {
+  font-size: 11px; color: var(--ink-secondary);
+  text-align: center; max-width: 70px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Window: Messages ──────────────────────────────── */
+.messages-content {
+  display: flex; flex-direction: column; height: 100%;
+}
+
+.messages-thread {
+  flex: 1; padding: 14px 16px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+  background: #fff;
+}
+
+.msg { display: flex; max-width: 78%; }
+
+.msg-bubble {
+  padding: 7px 13px;
+  font-size: 13px; line-height: 1.38;
+}
+
+.msg-received { align-self: flex-start; }
+.msg-received .msg-bubble {
+  background: #e9e9eb; color: var(--ink);
+  border-radius: 18px 18px 18px 6px;
+}
+
+.msg-sent { align-self: flex-end; }
+.msg-sent .msg-bubble {
+  background: var(--blue); color: #fff;
+  border-radius: 18px 18px 6px 18px;
+}
+
+.messages-input {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-top: 0.5px solid rgba(0, 0, 0, 0.06);
+  background: rgba(246, 246, 246, 0.95);
+}
+
+.msg-emoji-btn { flex-shrink: 0; cursor: pointer; display: flex; }
+
+.messages-input input {
+  flex: 1; height: 30px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px; padding: 0 12px;
+  font-size: 13px; font-family: var(--font-stack);
+  background: #fff; outline: none; color: var(--ink);
+}
+
+.messages-input input::placeholder { color: var(--ink-secondary); }
+
+/* ── Window: Photos ────────────────────────────────── */
+.photos-content {
+  padding: 4px; overflow-y: auto; background: #fff;
+}
+
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+
+.photo-thumb {
+  aspect-ratio: 1; border-radius: 2px;
+  position: relative; overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+
+.photo-thumb:hover { opacity: 0.85; }
+
+.photo-label {
+  position: absolute; bottom: 4px; left: 4px; right: 4px;
+  font-size: 9px; color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Control Center ────────────────────────────────── */
+.control-center {
+  position: fixed; top: calc(var(--menubar-h) + 8px); right: 8px;
+  width: 320px;
+  background: rgba(30, 30, 30, 0.72);
+  backdrop-filter: saturate(200%) blur(50px);
+  -webkit-backdrop-filter: saturate(200%) blur(50px);
+  border-radius: 16px;
+  padding: 14px;
+  z-index: 200; color: #fff;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow:
+    0 0 0 0.5px rgba(255,255,255,0.08),
+    0 10px 40px rgba(0, 0, 0, 0.5);
+  opacity: 0; transform: scale(0.96) translateY(-4px);
+  transform-origin: top right;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.control-center.visible {
+  opacity: 1; transform: scale(1) translateY(0);
+  pointer-events: all;
+}
+
+.cc-section-row {
+  display: flex; gap: 10px;
+}
+
+.cc-tile-group {
+  flex: 1; display: flex; flex-direction: column; gap: 10px;
+}
+
+.cc-tile {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.cc-tile:hover { background: rgba(255, 255, 255, 0.16); }
+
+.cc-tile-active {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.cc-tile-wide {
+  display: flex; align-items: center;
+  padding: 10px 12px; gap: 10px;
+}
+
+.cc-tile-square {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 12px 8px; gap: 4px;
+  flex: 1;
+}
+
+.cc-tile-left {
+  display: flex; align-items: center; gap: 10px;
+}
+
+.cc-tile-icon-circle {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.cc-icon-active {
+  background: var(--blue) !important;
+}
+
+.cc-tile-text { display: flex; flex-direction: column; }
+
+.cc-tile-label { font-size: 12px; font-weight: 600; }
+
+.cc-tile-sublabel {
+  font-size: 10px; opacity: 0.5; margin-top: 1px;
+}
+
+.cc-slider-section {
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.cc-slider-row {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px; padding: 14px;
+}
+
+.cc-slider-icon { flex-shrink: 0; width: 18px; display: flex; opacity: 0.7; }
+
+.cc-slider-track {
+  flex: 1; height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px; overflow: hidden;
+  cursor: pointer;
+}
+
+.cc-slider-fill {
+  height: 100%; background: #fff; border-radius: 2px;
+  transition: width 0.15s;
+}
+
+.cc-now-playing {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px; padding: 12px 14px;
+}
+
+.cc-album-art {
+  width: 44px; height: 44px; border-radius: 8px;
+  background: linear-gradient(135deg, #ff6b9d, #c44569, #574b90);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.cc-track-info { flex: 1; }
+.cc-track-title { font-size: 12px; font-weight: 600; }
+.cc-track-artist { font-size: 11px; opacity: 0.5; margin-top: 2px; }
+
+.cc-play-controls { display: flex; gap: 14px; align-items: center; }
+
+.cc-play-btn {
+  cursor: pointer; opacity: 0.7; font-size: 13px;
+  transition: opacity 0.1s;
+}
+
+.cc-play-btn:hover { opacity: 1; }
+.cc-play-main { font-size: 16px; }
+
+/* ── Spotlight ─────────────────────────────────────── */
+.spotlight-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0, 0, 0, 0.25);
+  display: none;
+  align-items: flex-start; justify-content: center;
+  padding-top: 18vh;
+}
+
+.spotlight-overlay.visible { display: flex; }
+
+.spotlight-modal {
+  width: 540px;
+  background: rgba(38, 38, 38, 0.82);
+  backdrop-filter: blur(60px) saturate(180%);
+  -webkit-backdrop-filter: blur(60px) saturate(180%);
+  border-radius: 12px;
+  padding: 8px 16px;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow:
+    0 0 0 0.5px rgba(255,255,255,0.1),
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 80px rgba(0,0,0,0.3);
+  animation: spotlightIn 0.15s ease-out;
+}
+
+@keyframes spotlightIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.spotlight-icon { flex-shrink: 0; display: flex; }
+
+.spotlight-input {
+  flex: 1; height: 42px;
+  border: none; background: transparent;
+  font-size: 22px; font-weight: 300;
+  font-family: var(--font-stack);
+  color: #fff; outline: none;
+  letter-spacing: -0.02em;
+}
+
+.spotlight-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 300;
+}
+
+/* ── Dock ──────────────────────────────────────────── */
+.dock-wrap {
+  position: fixed; bottom: 4px;
+  left: 0; right: 0;
+  display: flex; justify-content: center; align-items: flex-end;
+  z-index: 50;
+  pointer-events: none;
+  padding-bottom: 2px;
+}
+
+.dock {
+  display: flex; align-items: flex-end;
+  gap: 1px; padding: 3px 6px 4px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 0.5px solid rgba(255, 255, 255, 0.25);
+  border-radius: 18px;
+  backdrop-filter: saturate(170%) blur(30px);
+  -webkit-backdrop-filter: saturate(170%) blur(30px);
+  pointer-events: all;
+  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.05);
+}
+
+.dock-icon {
+  width: 50px; height: 50px;
+  border-radius: 11.5px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: default;
+  transition: transform 0.12s cubic-bezier(0.25, 1, 0.5, 1);
+  transform-origin: bottom center;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    inset 0 0.5px 0 rgba(255,255,255,0.15);
+}
+
+.dock-icon-symbol {
+  font-size: 24px; color: #fff;
+  pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Finder icon */
+.dock-icon-finder {
+  background: linear-gradient(180deg, #68d3ff, #3da4f5);
+  overflow: hidden;
+}
+
+.dock-icon-face {
+  width: 34px; height: 36px;
+  position: relative; display: flex;
+}
+
+.finder-face-left {
+  width: 17px; height: 36px;
+  background: #215faa;
+  border-radius: 4px 0 0 4px;
+  position: relative;
+}
+
+.finder-face-left::before {
+  content: ""; position: absolute;
+  top: 10px; left: 5px;
+  width: 6px; height: 6px;
+  background: white; border-radius: 50%;
+}
+
+.finder-face-left::after {
+  content: ""; position: absolute;
+  bottom: 6px; left: 3px; right: 2px;
+  height: 8px;
+  border-top: 2px solid rgba(255,255,255,0.7);
+  border-radius: 0 0 2px 2px;
+}
+
+.finder-face-right {
+  width: 17px; height: 36px;
+  background: #add8f0;
+  border-radius: 0 4px 4px 0;
+  position: relative;
+}
+
+.finder-face-right::before {
+  content: ""; position: absolute;
+  top: 10px; right: 5px;
+  width: 6px; height: 6px;
+  background: #215faa; border-radius: 50%;
+}
+
+.finder-face-right::after {
+  content: ""; position: absolute;
+  bottom: 6px; right: 3px; left: 2px;
+  height: 8px;
+  border-top: 2px solid rgba(0,0,0,0.2);
+  border-radius: 0 0 2px 2px;
+}
+
+/* Calendar dock icon */
+.dock-icon-calendar {
+  background: #fff;
+  border: 0.5px solid rgba(0,0,0,0.08);
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+.calendar-day-label {
+  font-size: 9px; font-weight: 700;
+  color: var(--red); letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.calendar-day-number {
+  font-size: 24px; font-weight: 300;
+  color: var(--ink); line-height: 1;
+  margin-top: -2px;
+}
+
+/* Downloads stack */
+.dock-icon-stack {
+  background: linear-gradient(180deg, #d0d0d4, #a8a8ac);
+  border: 0.5px solid rgba(0,0,0,0.08);
+}
+
+.stack-lines {
+  display: flex; flex-direction: column; gap: 4px;
+  align-items: center;
+}
+
+.stack-line {
+  width: 22px; height: 2.5px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 1px;
+}
+
+.stack-line:nth-child(2) { width: 18px; }
+.stack-line:nth-child(3) { width: 14px; }
+
+/* Trash dock icon */
+.dock-icon-trash {
+  background: linear-gradient(180deg, #e8e8ec, #d4d4d8);
+  border: 0.5px solid rgba(0,0,0,0.06);
+}
+
+.dock-separator {
+  width: 1px; height: 42px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 0 3px;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+/* Dock tooltip */
+.dock-icon::after {
+  content: attr(data-app);
+  position: absolute;
+  bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  background: rgba(30, 30, 30, 0.88);
+  color: #fff; font-size: 12px;
+  padding: 3px 10px; border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s, transform 0.12s;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.dock-icon:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── System Overview (legacy) ──────────────────────── */
+.sysoverview-content {
+  padding: 16px; display: flex; flex-direction: column; gap: 14px;
+}
+
+.sysoverview-status {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+
+.status-online { background: var(--green); box-shadow: 0 0 4px var(--green); }
+
+.sysoverview-status-text { font-weight: 500; }
+.sysoverview-version { margin-left: auto; font-size: 11px; color: var(--ink-secondary); }
+
+.sysoverview-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+
+.metric-card {
+  background: rgba(0,0,0,0.03);
+  border-radius: 8px; padding: 10px;
+}
+
+.metric-label { font-size: 11px; color: var(--ink-secondary); }
+.metric-value { font-size: 15px; font-weight: 600; margin: 2px 0 6px; }
+
+.metric-bar {
+  height: 4px; background: rgba(0,0,0,0.06);
+  border-radius: 2px; overflow: hidden;
+}
+
+.metric-bar-fill { height: 100%; border-radius: 2px; }
+
+.sysoverview-boot {
+  background: rgba(0,0,0,0.03);
+  border-radius: 8px; padding: 10px;
+}
+
+.boot-title { font-size: 11px; color: var(--ink-secondary); margin-bottom: 6px; }
+.boot-line { font-size: 11.5px; padding: 2px 0; }
+.boot-ok { color: var(--green); }
+
+/* ── Terminal (legacy) ─────────────────────────────── */
+.terminal-content {
+  background: #1e1e1e; padding: 8px 12px;
+  overflow-y: auto;
+}
+
+.window-titlebar-dark { background: #2d2d2d; border-bottom-color: #3a3a3a; }
+.window-title-dark { color: #ccc; }
+
+.term-line { font-size: 12px; font-family: var(--font-mono); line-height: 1.5; }
+.term-prompt { color: #5ac8fa; }
+.term-cmd { color: #fff; }
+.term-output { color: #b0b0b0; }
+.term-service-ok { color: var(--green); }
+
+.term-cursor {
+  display: inline-block;
+  width: 7px; height: 14px;
+  background: rgba(255,255,255,0.7);
+  animation: cursorBlink 1.1s steps(2) infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ── Files (legacy) ────────────────────────────────── */
+.files-content {
+  display: flex; height: 100%;
+}
+
+.files-sidebar {
+  width: 160px; min-width: 160px;
+  background: rgba(236, 236, 236, 0.95);
+  border-right: 0.5px solid rgba(0,0,0,0.06);
+  padding: 4px 0; overflow-y: auto;
+}
+
+.files-sidebar-section { margin-bottom: 8px; }
+.files-sidebar-heading {
+  font-size: 10px; font-weight: 700;
+  color: var(--ink-secondary); padding: 4px 12px;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+
+.files-sidebar-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px; font-size: 12px;
+  cursor: default; border-radius: 4px; margin: 0 4px;
+}
+
+.files-sidebar-item:hover { background: rgba(0,0,0,0.05); }
+.files-sidebar-active { background: rgba(0,122,255,0.12) !important; color: var(--blue); }
+
+.files-main { flex: 1; padding: 12px; overflow-y: auto; }
+
+.files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 80px);
+  gap: 12px; justify-content: start;
+}
+
+.files-item {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  cursor: default; padding: 4px; border-radius: 6px;
+}
+
+.files-item:hover { background: rgba(0,0,0,0.04); }
+.files-item span { font-size: 11px; text-align: center; }
+
+/* ── Quick Controls (legacy) ───────────────────────── */
+.quickcontrols-content {
+  padding: 14px; display: flex; flex-direction: column; gap: 12px;
+}
+
+.qc-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+
+.qc-tile {
+  height: 64px; border-radius: 10px;
+  background: rgba(0,0,0,0.05);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  cursor: pointer; transition: background 0.12s;
+}
+
+.qc-tile:hover { background: rgba(0,0,0,0.08); }
+.qc-tile-active { background: var(--blue) !important; color: #fff; }
+
+.qc-tile span { font-size: 11px; }
+
+.qc-sliders { display: flex; flex-direction: column; gap: 8px; }
+
+.qc-slider-row {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.qc-slider-track {
+  flex: 1; height: 4px;
+  background: rgba(0,0,0,0.08); border-radius: 2px;
+  overflow: hidden;
+}
+
+.qc-slider-fill { height: 100%; background: var(--blue); border-radius: 2px; }
+.qc-slider-label { font-size: 10px; color: var(--ink-secondary); min-width: 55px; }
+
+/* ── Staggered Window Animations ───────────────────── */
+.window:nth-child(1) { animation-delay: 0.05s; }
+.window:nth-child(2) { animation-delay: 0.12s; }
+.window:nth-child(3) { animation-delay: 0.2s; }
+.window:nth-child(4) { animation-delay: 0.28s; }
+
+/* ── Responsive ────────────────────────────────────── */
+@media (max-width: 900px) {
+  .window { transform: scale(0.8); transform-origin: top left; }
+  .dock-icon { width: 40px; height: 40px; border-radius: 9px; }
+}

@@ -1,0 +1,9 @@
+[package]
+name = "svc-manager"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "svc_manager"
+path = "src/lib.rs"

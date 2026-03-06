@@ -1,0 +1,12 @@
+[package]
+name = "shell"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+ipc = { path = "../ipc" }
+
+[lib]
+name = "shell"
+path = "src/lib.rs"

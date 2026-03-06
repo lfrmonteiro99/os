@@ -1,0 +1,14 @@
+[package]
+name = "desktop-native"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+eframe = "0.33"
+ipc = { path = "../ipc" }
+sysinfo = "0.33"
+battery = "0.7"
+chrono = "0.4"
+walkdir = "2"
+portable-pty = "0.8"

@@ -1,0 +1,3 @@
+window,overview_window,108,225,511,506
+window,telemetry_window,840,183,308,362
+z,telemetry_window|overview_window

@@ -1,0 +1,3 @@
+@echo off
+echo Starting AuroraOS native desktop preview...
+cargo run -p desktop-native

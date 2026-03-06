@@ -1,0 +1,11 @@
+[package]
+name = "init"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+control-plane = { path = "../control-plane" }
+ipc = { path = "../ipc" }
+shell = { path = "../shell" }
+svc-manager = { path = "../svc-manager" }

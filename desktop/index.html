@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AuroraOS Desktop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=SF+Pro+Text:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- Big Sur Wallpaper -->
+    <div class="wallpaper">
+      <div class="wallpaper-hills"></div>
+    </div>
+
+    <!-- Menu Bar -->
+    <header class="menu-bar">
+      <div class="menu-left">
+        <span class="menu-item apple-logo">
+          <svg viewBox="0 0 17 20" width="13" height="16" fill="currentColor">
+            <path d="M14.94 10.81c-.02-2.17 1.77-3.21 1.85-3.26-1.01-1.47-2.58-1.67-3.14-1.7-1.33-.14-2.6.79-3.28.79-.68 0-1.72-.77-2.83-.75-1.46.02-2.8.85-3.55 2.15-1.52 2.63-.39 6.52 1.09 8.65.72 1.04 1.58 2.22 2.72 2.18 1.09-.04 1.5-.71 2.82-.71 1.32 0 1.69.71 2.84.68 1.17-.02 1.91-1.06 2.63-2.11.83-1.21 1.17-2.38 1.19-2.44-.03-.01-2.28-.88-2.3-3.48h-.04zM12.79 4.19c.6-.73 1-1.74.89-2.75-.86.04-1.91.58-2.52 1.3-.55.63-1.03 1.65-.9 2.62.96.07 1.93-.49 2.53-1.17z"/>
+          </svg>
+        </span>
+        <span class="menu-item bold">Finder</span>
+        <span class="menu-item">File</span>
+        <span class="menu-item">Edit</span>
+        <span class="menu-item">View</span>
+        <span class="menu-item">Go</span>
+        <span class="menu-item">Window</span>
+        <span class="menu-item">Help</span>
+      </div>
+      <div class="menu-right">
+        <span class="menu-icon" title="Wi-Fi">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1.5 8.5a16 16 0 0121 0"/>
+            <path d="M5 12.55a11 11 0 0114 0"/>
+            <path d="M8.53 16.11a6 6 0 016.95 0"/>
+            <circle cx="12" cy="20" r="1" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="menu-icon" title="Bluetooth">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+            <path d="M12 2L8 6l4 4-4 4 4 4V2zm0 0v20l5-5-5-5 5-5-5-5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="menu-icon battery-icon" title="Battery">
+          <svg viewBox="0 0 28 14" width="22" height="11" fill="none">
+            <rect x="0.5" y="0.5" width="23" height="11.5" rx="2.5" stroke="currentColor" stroke-opacity="0.5"/>
+            <rect x="2" y="2" width="17" height="8.5" rx="1.5" fill="currentColor" opacity="0.7"/>
+            <path d="M25 4.5v3.5a2 2 0 000-3.5z" fill="currentColor" opacity="0.5"/>
+          </svg>
+        </span>
+        <span id="clock" class="menu-clock">Thu Mar 6  9:41 AM</span>
+        <span class="menu-icon" id="cc-toggle" title="Control Center">
+          <svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor">
+            <circle cx="6" cy="4" r="2.5"/>
+            <circle cx="14" cy="4" r="2.5"/>
+            <circle cx="6" cy="16" r="2.5"/>
+            <circle cx="14" cy="16" r="2.5"/>
+            <rect x="3.5" y="8.5" width="5" height="5" rx="1.2"/>
+            <rect x="11.5" y="8.5" width="5" height="5" rx="1.2"/>
+          </svg>
+        </span>
+        <span class="menu-icon" id="spotlight-toggle" title="Spotlight">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+        </span>
+      </div>
+    </header>
+
+    <!-- Desktop Windows -->
+    <main class="desktop">
+
+      <!-- Window 1: Maps -->
+      <section class="window window-maps" data-window style="top:60px;left:30px;width:480px;height:400px;z-index:1;">
+        <div class="window-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <span class="window-title">Maps</span>
+        </div>
+        <div class="window-content maps-content">
+          <div class="maps-sidebar">
+            <div class="maps-search">
+              <input type="text" placeholder="Search Maps" readonly />
+            </div>
+            <ul class="maps-places">
+              <li><span class="place-dot" style="background:#007aff;"></span>Current Location</li>
+              <li><span class="place-dot" style="background:#ff3b30;"></span>Home</li>
+              <li><span class="place-dot" style="background:#34c759;"></span>Work</li>
+              <li><span class="place-dot" style="background:#ff9f0a;"></span>Golden Gate Bridge</li>
+              <li><span class="place-dot" style="background:#af52de;"></span>Apple Park</li>
+              <li><span class="place-dot" style="background:#5ac8fa;"></span>Ferry Building</li>
+              <li><span class="place-dot" style="background:#ff375f;"></span>Fisherman's Wharf</li>
+              <li><span class="place-dot" style="background:#30d158;"></span>Twin Peaks</li>
+            </ul>
+          </div>
+          <div class="maps-main">
+            <div class="maps-pin" style="top:35%;left:40%;">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="#ff3b30"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            </div>
+            <div class="maps-pin" style="top:55%;left:65%;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="#007aff"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Window 2: Safari -->
+      <section class="window window-safari" data-window style="top:80px;left:280px;width:560px;height:440px;z-index:2;">
+        <div class="window-titlebar safari-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <div class="safari-nav-btns">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="rgba(0,0,0,0.3)" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="rgba(0,0,0,0.3)" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+          </div>
+          <div class="safari-address-bar">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            <span>apple.com</span>
+          </div>
+          <div class="safari-titlebar-spacer"></div>
+        </div>
+        <div class="window-content safari-content">
+          <div class="safari-section-title">Favorites</div>
+          <div class="safari-favorites-grid">
+            <div class="safari-fav">
+              <div class="safari-fav-icon" style="background:linear-gradient(135deg,#555,#333);"><svg viewBox="0 0 17 20" width="16" height="19" fill="white"><path d="M14.94 10.81c-.02-2.17 1.77-3.21 1.85-3.26-1.01-1.47-2.58-1.67-3.14-1.7-1.33-.14-2.6.79-3.28.79-.68 0-1.72-.77-2.83-.75-1.46.02-2.8.85-3.55 2.15-1.52 2.63-.39 6.52 1.09 8.65.72 1.04 1.58 2.22 2.72 2.18 1.09-.04 1.5-.71 2.82-.71 1.32 0 1.69.71 2.84.68 1.17-.02 1.91-1.06 2.63-2.11.83-1.21 1.17-2.38 1.19-2.44-.03-.01-2.28-.88-2.3-3.48h-.04z"/></svg></div>
+              <span>Apple</span>
+            </div>
+            <div class="safari-fav">
+              <div class="safari-fav-icon" style="background:#e50914;">N</div>
+              <span>Netflix</span>
+            </div>
+            <div class="safari-fav">
+              <div class="safari-fav-icon safari-fav-google">G</div>
+              <span>Google</span>
+            </div>
+            <div class="safari-fav">
+              <div class="safari-fav-icon" style="background:linear-gradient(135deg,#0077b5,#00a0dc);">in</div>
+              <span>LinkedIn</span>
+            </div>
+            <div class="safari-fav">
+              <div class="safari-fav-icon" style="background:#1da1f2;">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="white"><path d="M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.2-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 01-1.93.07 4.28 4.28 0 004 2.98 8.52 8.52 0 01-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23z"/></svg>
+              </div>
+              <span>Twitter</span>
+            </div>
+            <div class="safari-fav">
+              <div class="safari-fav-icon" style="background:linear-gradient(135deg,#ff0000,#cc0000);">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="white"><path d="M23.5 6.19a3 3 0 00-2.11-2.12C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.39.57A3 3 0 00.5 6.19 31.44 31.44 0 000 12a31.44 31.44 0 00.5 5.81 3 3 0 002.11 2.12c1.89.57 9.39.57 9.39.57s7.5 0 9.39-.57a3 3 0 002.11-2.12A31.44 31.44 0 0024 12a31.44 31.44 0 00-.5-5.81zM9.75 15.56V8.44L15.5 12l-5.75 3.56z"/></svg>
+              </div>
+              <span>YouTube</span>
+            </div>
+            <div class="safari-fav">
+              <div class="safari-fav-icon" style="background:linear-gradient(135deg,#1877f2,#0d65d9);">f</div>
+              <span>Facebook</span>
+            </div>
+            <div class="safari-fav">
+              <div class="safari-fav-icon" style="background:linear-gradient(135deg,#2b2b2b,#1a1a1a);">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+              </div>
+              <span>Wikipedia</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Window 3: Messages -->
+      <section class="window window-messages" data-window style="top:260px;left:200px;width:380px;height:340px;z-index:3;">
+        <div class="window-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <span class="window-title">Messages</span>
+        </div>
+        <div class="window-content messages-content">
+          <div class="messages-thread">
+            <div class="msg msg-received"><div class="msg-bubble">Hey! How's AuroraOS coming along?</div></div>
+            <div class="msg msg-sent"><div class="msg-bubble">It's going great! Just finished the desktop environment</div></div>
+            <div class="msg msg-received"><div class="msg-bubble">That's awesome! Can I try it?</div></div>
+            <div class="msg msg-sent"><div class="msg-bubble">Sure! Check out the preview at localhost:8080</div></div>
+            <div class="msg msg-received"><div class="msg-bubble">The UI looks incredible, very macOS-like</div></div>
+            <div class="msg msg-sent"><div class="msg-bubble">Thanks! Built it all with Rust + egui</div></div>
+            <div class="msg msg-received"><div class="msg-bubble">Impressive! Keep it up</div></div>
+          </div>
+          <div class="messages-input">
+            <span class="msg-emoji-btn">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#8e8e93" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="9" r="1" fill="#8e8e93" stroke="none"/><circle cx="15" cy="9" r="1" fill="#8e8e93" stroke="none"/></svg>
+            </span>
+            <input type="text" placeholder="iMessage" readonly />
+          </div>
+        </div>
+      </section>
+
+      <!-- Window 4: Photos -->
+      <section class="window window-photos" data-window style="top:50px;right:40px;width:380px;height:420px;z-index:2;">
+        <div class="window-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <span class="window-title">Photos</span>
+        </div>
+        <div class="window-content photos-content">
+          <div class="photos-grid">
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#ff6b6b,#ffa36b);"><span class="photo-label">Sunset Beach</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#48c6ef,#6f86d6);"><span class="photo-label">Ocean View</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#a8e063,#56ab2f);"><span class="photo-label">Mountain Trail</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#f093fb,#f5576c);"><span class="photo-label">Cherry Blossoms</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#4facfe,#00f2fe);"><span class="photo-label">City Skyline</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#43e97b,#38f9d7);"><span class="photo-label">Forest Path</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#fa709a,#fee140);"><span class="photo-label">Golden Hour</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#a18cd1,#fbc2eb);"><span class="photo-label">Lavender Field</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#ffecd2,#fcb69f);"><span class="photo-label">Desert Dunes</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#667eea,#764ba2);"><span class="photo-label">Northern Lights</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#f5af19,#f12711);"><span class="photo-label">Autumn Leaves</span></div>
+            <div class="photo-thumb" style="background:linear-gradient(135deg,#c471f5,#fa71cd);"><span class="photo-label">Neon Streets</span></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Control Center -->
+    <div class="control-center" id="control-center">
+      <div class="cc-section-row">
+        <div class="cc-tile-group">
+          <div class="cc-tile cc-tile-wide cc-tile-active" data-cc-toggle>
+            <div class="cc-tile-left">
+              <div class="cc-tile-icon-circle cc-icon-active">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12.55a11 11 0 0114 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/>
+                </svg>
+              </div>
+              <div class="cc-tile-text">
+                <div class="cc-tile-label">Wi-Fi</div>
+                <div class="cc-tile-sublabel">Home Network</div>
+              </div>
+            </div>
+          </div>
+          <div class="cc-tile cc-tile-wide cc-tile-active" data-cc-toggle>
+            <div class="cc-tile-left">
+              <div class="cc-tile-icon-circle cc-icon-active">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2L8 6l4 4-4 4 4 4V2z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="cc-tile-text">
+                <div class="cc-tile-label">Bluetooth</div>
+                <div class="cc-tile-sublabel">On</div>
+              </div>
+            </div>
+          </div>
+          <div class="cc-tile cc-tile-wide" data-cc-toggle>
+            <div class="cc-tile-left">
+              <div class="cc-tile-icon-circle">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </div>
+              <div class="cc-tile-text">
+                <div class="cc-tile-label">AirDrop</div>
+                <div class="cc-tile-sublabel">Contacts Only</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cc-tile-group">
+          <div class="cc-tile cc-tile-square" data-cc-toggle>
+            <div class="cc-tile-icon-circle">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
+            </div>
+            <div class="cc-tile-label">Do Not Disturb</div>
+          </div>
+          <div class="cc-tile cc-tile-square" data-cc-toggle>
+            <div class="cc-tile-icon-circle">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M9 16v4M15 16v4"/></svg>
+            </div>
+            <div class="cc-tile-label">Screen Mirroring</div>
+          </div>
+        </div>
+      </div>
+      <div class="cc-slider-section">
+        <div class="cc-slider-row">
+          <span class="cc-slider-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </span>
+          <div class="cc-slider-track">
+            <div class="cc-slider-fill" style="width:75%;" data-slider></div>
+          </div>
+        </div>
+        <div class="cc-slider-row">
+          <span class="cc-slider-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.08"/></svg>
+          </span>
+          <div class="cc-slider-track">
+            <div class="cc-slider-fill" style="width:45%;" data-slider></div>
+          </div>
+        </div>
+      </div>
+      <div class="cc-now-playing">
+        <div class="cc-album-art"></div>
+        <div class="cc-track-info">
+          <div class="cc-track-title">Aurora Ambient</div>
+          <div class="cc-track-artist">System Sounds</div>
+        </div>
+        <div class="cc-play-controls">
+          <span class="cc-play-btn">&#x23EE;</span>
+          <span class="cc-play-btn cc-play-main">&#x25B6;</span>
+          <span class="cc-play-btn">&#x23ED;</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spotlight -->
+    <div class="spotlight-overlay" id="spotlight-overlay">
+      <div class="spotlight-modal">
+        <div class="spotlight-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+        </div>
+        <input type="text" class="spotlight-input" placeholder="Spotlight Search" />
+      </div>
+    </div>
+
+    <!-- Dock -->
+    <footer class="dock-wrap">
+      <div class="dock" id="dock">
+        <!-- Finder -->
+        <div class="dock-icon dock-icon-finder" data-app="Finder">
+          <div class="dock-icon-face">
+            <div class="finder-face-left"></div>
+            <div class="finder-face-right"></div>
+          </div>
+        </div>
+        <!-- Safari -->
+        <div class="dock-icon" data-app="Safari" style="background:linear-gradient(180deg,#56c0f0 0%,#4fb5e6 50%,#4aaee0 100%);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="white" stroke-width="0.8" opacity="0.4"/>
+              <polygon points="12,3 9,15 12,12 15,15" fill="white" opacity="0.9"/>
+              <polygon points="12,21 15,9 12,12 9,9" fill="#ff3b30" opacity="0.9"/>
+            </svg>
+          </span>
+        </div>
+        <!-- Messages -->
+        <div class="dock-icon" data-app="Messages" style="background:linear-gradient(180deg,#5bd468,#34c759);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
+              <path d="M2 12c0-5 4.5-9 10-9s10 4 10 9-4.5 9-10 9c-1.5 0-3-.3-4.3-.8L3 22l1.5-4.2C3 16 2 14.2 2 12z"/>
+            </svg>
+          </span>
+        </div>
+        <!-- Mail -->
+        <div class="dock-icon" data-app="Mail" style="background:linear-gradient(180deg,#5ac8fa,#007aff);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2"/>
+              <path d="M2 5l10 8 10-8"/>
+            </svg>
+          </span>
+        </div>
+        <!-- Maps -->
+        <div class="dock-icon" data-app="Maps" style="background:linear-gradient(180deg,#6fd668,#32a852);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3V6z" fill="white" opacity="0.9" stroke="none"/>
+              <path d="M9 3v15M15 6v15" stroke="rgba(0,0,0,0.15)" stroke-width="1"/>
+            </svg>
+          </span>
+        </div>
+        <!-- Photos -->
+        <div class="dock-icon" data-app="Photos" style="background:linear-gradient(180deg,#fff,#f5f5f7);border:0.5px solid rgba(0,0,0,0.1);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+              <circle cx="12" cy="12" r="5" stroke="url(#photoGrad)" stroke-width="3" fill="none"/>
+              <defs><linearGradient id="photoGrad" x1="0" y1="0" x2="24" y2="24"><stop offset="0%" stop-color="#ff3b30"/><stop offset="25%" stop-color="#ff9500"/><stop offset="50%" stop-color="#ffcc00"/><stop offset="75%" stop-color="#34c759"/><stop offset="100%" stop-color="#5ac8fa"/></linearGradient></defs>
+            </svg>
+          </span>
+        </div>
+        <!-- FaceTime -->
+        <div class="dock-icon" data-app="FaceTime" style="background:linear-gradient(180deg,#5bd468,#28a745);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
+              <rect x="2" y="6" width="13" height="12" rx="2.5"/>
+              <path d="M17 9.5l5-3v11l-5-3v-5z"/>
+            </svg>
+          </span>
+        </div>
+        <!-- Calendar -->
+        <div class="dock-icon dock-icon-calendar" data-app="Calendar">
+          <div class="calendar-day-label">THU</div>
+          <div class="calendar-day-number" id="calendar-day">6</div>
+        </div>
+        <!-- Notes -->
+        <div class="dock-icon" data-app="Notes" style="background:linear-gradient(180deg,#ffd60a,#ffcc02);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <rect x="4" y="3" width="16" height="18" rx="2" fill="white"/>
+              <line x1="7" y1="8" x2="17" y2="8" stroke="#ddd" stroke-width="1"/>
+              <line x1="7" y1="11" x2="17" y2="11" stroke="#ddd" stroke-width="1"/>
+              <line x1="7" y1="14" x2="14" y2="14" stroke="#ddd" stroke-width="1"/>
+            </svg>
+          </span>
+        </div>
+        <!-- Reminders -->
+        <div class="dock-icon" data-app="Reminders" style="background:linear-gradient(180deg,#fff,#f0f0f2);border:0.5px solid rgba(0,0,0,0.08);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <circle cx="7" cy="8" r="3" fill="#007aff"/>
+              <circle cx="7" cy="16" r="3" fill="#ff9500"/>
+              <circle cx="17" cy="8" r="3" fill="#ff3b30"/>
+              <circle cx="17" cy="16" r="3" fill="#34c759"/>
+            </svg>
+          </span>
+        </div>
+        <!-- Music -->
+        <div class="dock-icon" data-app="Music" style="background:linear-gradient(180deg,#fc3c44,#e02030);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+          </span>
+        </div>
+        <!-- TV -->
+        <div class="dock-icon" data-app="TV" style="background:linear-gradient(180deg,#1d1d1f,#333);">
+          <span class="dock-icon-symbol" style="color:white;font-size:12px;font-weight:700;letter-spacing:-0.5px;">tv</span>
+        </div>
+        <!-- App Store -->
+        <div class="dock-icon" data-app="App Store" style="background:linear-gradient(180deg,#2997ff,#0071e3);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
+              <path d="M12 2L8.5 9h7L12 2zM8.5 9L3 20h5l2.5-5.5L8.5 9zM15.5 9l-2 5.5L16 20h5L15.5 9z"/>
+            </svg>
+          </span>
+        </div>
+        <!-- System Preferences -->
+        <div class="dock-icon" data-app="System Preferences" style="background:linear-gradient(180deg,#8e8e93,#636366);">
+          <span class="dock-icon-symbol">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="1.5">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+            </svg>
+          </span>
+        </div>
+
+        <div class="dock-separator"></div>
+
+        <!-- Downloads stack -->
+        <div class="dock-icon dock-icon-stack" data-app="Downloads">
+          <div class="stack-lines">
+            <div class="stack-line"></div>
+            <div class="stack-line"></div>
+            <div class="stack-line"></div>
+          </div>
+        </div>
+        <!-- Trash -->
+        <div class="dock-icon dock-icon-trash" data-app="Trash">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#8e8e93" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h16M10 11v6M14 11v6"/>
+            <path d="M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12"/>
+            <path d="M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+          </svg>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
