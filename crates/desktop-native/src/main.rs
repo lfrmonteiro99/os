@@ -506,6 +506,13 @@ struct AuroraDesktopApp {
     // App Switcher (Ctrl+Tab)
     show_app_switcher: bool,
     app_switcher_idx: usize,
+    // Keyboard shortcuts overlay
+    show_shortcuts_overlay: bool,
+    // Downloads stack
+    show_downloads_stack: bool,
+    recent_downloads: Vec<String>,
+    // Mission Control drag
+    mc_dragging_window: Option<WindowKind>,
     // Spotlight: deferred file open
     spotlight_open_file: Option<PathBuf>,
     // Wallpaper
@@ -641,6 +648,10 @@ impl AuroraDesktopApp {
             photo_viewer_idx: None,
             show_app_switcher: false,
             app_switcher_idx: 0,
+            show_shortcuts_overlay: false,
+            show_downloads_stack: false,
+            recent_downloads: Vec::new(),
+            mc_dragging_window: None,
             spotlight_open_file: None,
             wallpaper_idx: 0,
             show_login: true,
@@ -1241,9 +1252,9 @@ impl AuroraDesktopApp {
                     .inner_margin(egui::Margin::symmetric(4, 4))
                     .show(ui, |ui| {
                         ui.set_min_width(210.0);
-                        let items = ["New Folder", "---", "Get Info", "Change Wallpaper",
-                            "---", "Use Stacks", "Sort By", "Clean Up",
-                            "---", "Mission Control", "Show View Options"];
+                        let items = ["New Folder", "New File", "---", "Get Info", "Change Wallpaper",
+                            "---", "Show Desktop", "Mission Control",
+                            "---", "Open Terminal Here", "Keyboard Shortcuts"];
                         for label in items {
                             if label == "---" {
                                 ui.add_space(2.0);
@@ -1281,8 +1292,42 @@ impl AuroraDesktopApp {
                                         "Mission Control" => {
                                             self.show_mission_control = !self.show_mission_control;
                                         }
+                                        "New File" => {
+                                            let desktop = dirs_home().join("Desktop");
+                                            let target = if desktop.exists() { desktop } else { dirs_home() };
+                                            let mut name = "Untitled.txt".to_string();
+                                            let mut n = 1u32;
+                                            while target.join(&name).exists() {
+                                                n += 1;
+                                                name = format!("Untitled ({n}).txt");
+                                            }
+                                            if fs::write(target.join(&name), "").is_ok() {
+                                                self.toast_manager.push(Toast::new("File Created", &name, Color32::from_rgb(52, 199, 89)));
+                                                if self.fm_current_dir == target {
+                                                    self.fm_entries = read_directory(&target);
+                                                }
+                                            }
+                                        }
                                         "Get Info" => {
                                             self.toast_manager.push(Toast::new("AuroraOS", format!("v0.1.0 | {} windows | {:.0} FPS", WINDOW_COUNT, self.fps_smoothed), Color32::from_rgb(142, 142, 147)));
+                                        }
+                                        "Show Desktop" => {
+                                            // Minimize all windows
+                                            for i in 0..WINDOW_COUNT {
+                                                if self.windows[i].open && !self.windows[i].minimized {
+                                                    self.windows[i].minimized = true;
+                                                    self.windows[i].id_epoch = self.windows[i].id_epoch.saturating_add(1);
+                                                }
+                                            }
+                                        }
+                                        "Open Terminal Here" => {
+                                            let win = self.window_mut(WindowKind::Terminal);
+                                            win.restore();
+                                            win.id_epoch = win.id_epoch.saturating_add(1);
+                                            self.bring_to_front(WindowKind::Terminal);
+                                        }
+                                        "Keyboard Shortcuts" => {
+                                            self.show_shortcuts_overlay = true;
                                         }
                                         _ => {}
                                     }
@@ -2376,6 +2421,46 @@ impl AuroraDesktopApp {
             if ui.add(egui::Button::new(RichText::new(">>").size(16.0).color(Color32::WHITE))
                 .fill(Color32::TRANSPARENT).stroke(Stroke::NONE).min_size(Vec2::splat(36.0))).clicked() {
                 *track_idx = (*track_idx + 1) % tracks.len();
+            }
+        });
+
+        ui.add_space(12.0);
+        ui.label(RichText::new("Up Next").size(12.0).strong().color(Color32::from_gray(160)));
+        ui.add_space(4.0);
+
+        // Track list
+        egui::ScrollArea::vertical().max_height(120.0).show(ui, |ui| {
+            for (i, (t_name, t_artist, t_color)) in tracks.iter().enumerate() {
+                let is_current = i == *track_idx;
+                let bg = if is_current {
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 15)
+                } else {
+                    Color32::TRANSPARENT
+                };
+                let resp = egui::Frame::default()
+                    .fill(bg)
+                    .corner_radius(CornerRadius::same(6))
+                    .inner_margin(egui::Margin::symmetric(8, 4))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            // Color dot
+                            let (dot_r, _) = ui.allocate_exact_size(Vec2::splat(8.0), Sense::hover());
+                            ui.painter().circle_filled(dot_r.center(), 4.0, *t_color);
+                            // Playing indicator
+                            if is_current && *playing {
+                                ui.label(RichText::new("♪").size(11.0).color(*t_color));
+                            }
+                            ui.vertical(|ui| {
+                                let name_color = if is_current { Color32::WHITE } else { Color32::from_gray(200) };
+                                ui.label(RichText::new(*t_name).size(12.0).color(name_color));
+                                ui.label(RichText::new(*t_artist).size(10.0).color(Color32::from_gray(120)));
+                            });
+                        });
+                    }).response;
+                if resp.interact(Sense::click()).clicked() {
+                    *track_idx = i;
+                    *playing = true;
+                }
             }
         });
     }
@@ -3537,7 +3622,27 @@ impl AuroraDesktopApp {
                                             self.launchpad_page = 0;
                                             self.dock_bounce = Some((*icon, Instant::now()));
                                         } else if *icon == DockIcon::Store {
-                                            self.show_embed_launcher = !self.show_embed_launcher;
+                                            // Toggle downloads stack
+                                            self.show_downloads_stack = !self.show_downloads_stack;
+                                            if self.show_downloads_stack && self.recent_downloads.is_empty() {
+                                                // Scan Downloads folder
+                                                let dl_dir = dirs_home().join("Downloads");
+                                                if dl_dir.exists() {
+                                                    if let Ok(entries) = fs::read_dir(&dl_dir) {
+                                                        let mut files: Vec<(String, std::time::SystemTime)> = entries
+                                                            .filter_map(|e| e.ok())
+                                                            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+                                                            .filter_map(|e| {
+                                                                let name = e.file_name().to_string_lossy().to_string();
+                                                                let modified = e.metadata().ok()?.modified().ok()?;
+                                                                Some((name, modified))
+                                                            })
+                                                            .collect();
+                                                        files.sort_by(|a, b| b.1.cmp(&a.1)); // newest first
+                                                        self.recent_downloads = files.into_iter().take(10).map(|(n, _)| n).collect();
+                                                    }
+                                                }
+                                            }
                                             self.dock_bounce = Some((*icon, Instant::now()));
                                         } else if let Some(wk) = icon.window_kind() {
                                             open_window = Some(wk);
@@ -3555,6 +3660,88 @@ impl AuroraDesktopApp {
             win.restore();
             win.id_epoch = win.id_epoch.saturating_add(1);
             self.bring_to_front(kind);
+        }
+    }
+
+    // ── Downloads Stack ────────────────────────────────────────────────────
+
+    fn render_downloads_stack(&mut self, ctx: &egui::Context) {
+        let screen = ctx.content_rect();
+        // Position above the dock, near right side
+        let popup_w = 260.0;
+        let x = screen.right() - popup_w - 80.0;
+        let y = screen.bottom() - DOCK_HEIGHT - 8.0;
+
+        let dl_dir = dirs_home().join("Downloads");
+        let files = self.recent_downloads.clone();
+
+        egui::Area::new(Id::new("downloads_stack"))
+            .fixed_pos(Pos2::new(x, y))
+            .pivot(Align2::LEFT_BOTTOM)
+            .order(Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::default()
+                    .fill(Color32::from_rgba_unmultiplied(35, 35, 40, 230))
+                    .stroke(Stroke::new(0.5, Color32::from_white_alpha(40)))
+                    .corner_radius(CornerRadius::same(12))
+                    .inner_margin(egui::Margin::symmetric(12, 10))
+                    .show(ui, |ui| {
+                        ui.set_min_width(popup_w - 24.0);
+                        ui.label(RichText::new("Downloads").size(13.0).strong().color(Color32::WHITE));
+                        ui.add_space(6.0);
+
+                        if files.is_empty() {
+                            ui.label(RichText::new("No recent files").size(12.0).color(Color32::from_gray(120)));
+                        } else {
+                            egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+                                for name in &files {
+                                    let ext = name.rsplit('.').next().unwrap_or("");
+                                    let ext_color = match ext {
+                                        "pdf" => Color32::from_rgb(255, 59, 48),
+                                        "zip" | "rar" | "7z" => Color32::from_rgb(88, 86, 214),
+                                        "exe" | "msi" => Color32::from_rgb(142, 142, 147),
+                                        "png" | "jpg" | "jpeg" | "gif" => Color32::from_rgb(0, 122, 255),
+                                        "mp3" | "wav" | "flac" => Color32::from_rgb(255, 55, 95),
+                                        "mp4" | "mkv" | "avi" => Color32::from_rgb(255, 149, 0),
+                                        "doc" | "docx" => Color32::from_rgb(0, 112, 192),
+                                        "xls" | "xlsx" => Color32::from_rgb(52, 199, 89),
+                                        _ => Color32::from_gray(100),
+                                    };
+                                    let resp = egui::Frame::default()
+                                        .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 8))
+                                        .corner_radius(CornerRadius::same(6))
+                                        .inner_margin(egui::Margin::symmetric(8, 4))
+                                        .show(ui, |ui| {
+                                            ui.horizontal(|ui| {
+                                                let (dot_r, _) = ui.allocate_exact_size(Vec2::splat(8.0), Sense::hover());
+                                                ui.painter().circle_filled(dot_r.center(), 4.0, ext_color);
+                                                let truncated = if name.len() > 30 { format!("{}...", &name[..28]) } else { name.clone() };
+                                                ui.label(RichText::new(truncated).size(12.0).color(Color32::from_gray(220)));
+                                            });
+                                        }).response;
+                                    if resp.interact(Sense::click()).clicked() {
+                                        let path = dl_dir.join(name);
+                                        open_file_with_system(&path);
+                                        self.show_downloads_stack = false;
+                                    }
+                                    ui.add_space(1.0);
+                                }
+                            });
+                        }
+
+                        ui.add_space(6.0);
+                        if ui.add(egui::Button::new(RichText::new("Open Downloads Folder").size(11.0).color(Color32::from_rgb(0, 122, 255)))
+                            .fill(Color32::TRANSPARENT).stroke(Stroke::NONE)).clicked() {
+                            open_file_with_system(&dl_dir);
+                            self.show_downloads_stack = false;
+                        }
+                    });
+            });
+
+        // Click outside to dismiss
+        if ctx.input(|i| i.pointer.primary_clicked()) {
+            // Simple dismiss — the click on an item above already handles that case
+            // We rely on the Area not consuming the click to dismiss
         }
     }
 
@@ -4284,9 +4471,13 @@ impl AuroraDesktopApp {
                             let (content_r, _) = ui.allocate_exact_size(Vec2::new(thumb_w - 32.0, thumb_h - 44.0), Sense::hover());
                             ui.painter().rect_filled(content_r, CornerRadius::same(4), Color32::from_rgba_unmultiplied(30, 30, 40, alpha));
                         }).response;
-                    let interact_resp = resp.interact(Sense::click());
+                    let interact_resp = resp.interact(Sense::click_and_drag());
                     if interact_resp.clicked() {
                         clicked_window = Some(*kind);
+                    }
+                    // Start dragging
+                    if interact_resp.dragged() {
+                        self.mc_dragging_window = Some(*kind);
                     }
                     // Right-click to move window to another desktop
                     interact_resp.context_menu(|ui| {
@@ -4305,6 +4496,36 @@ impl AuroraDesktopApp {
                 });
         }
 
+        // Drag-and-drop windows to desktop strips
+        if let Some(dragging_kind) = self.mc_dragging_window {
+            // Draw drag indicator near cursor
+            if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                let drag_painter = ctx.layer_painter(egui::LayerId::new(Order::Tooltip, Id::new("mc_drag")));
+                drag_painter.text(pos + Vec2::new(12.0, -12.0), Align2::LEFT_BOTTOM,
+                    dragging_kind.title(), FontId::proportional(12.0),
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 200));
+            }
+            // Check if drag released
+            if !ctx.input(|i| i.pointer.any_down()) {
+                if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                    // Check if over a desktop strip
+                    if pos.y < desk_h + 20.0 {
+                        for desk_i in 0..self.desktop_count {
+                            let dx = strip_x + desk_i as f32 * (desk_w + 12.0);
+                            if pos.x >= dx && pos.x <= dx + desk_w && desk_i != self.current_desktop {
+                                self.window_mut(dragging_kind).desktop = desk_i;
+                                self.toast_manager.push(Toast::new(
+                                    "Moved", format!("{} → Desktop {}", dragging_kind.title(), desk_i + 1),
+                                    Color32::from_rgb(0, 122, 255)));
+                                break;
+                            }
+                        }
+                    }
+                }
+                self.mc_dragging_window = None;
+            }
+        }
+
         // Click on window thumbnail to focus it and exit MC
         if let Some(kind) = clicked_window {
             self.bring_to_front(kind);
@@ -4313,7 +4534,7 @@ impl AuroraDesktopApp {
 
         // Click on background to close MC
         if ctx.input(|i| i.pointer.primary_clicked()) {
-            if clicked_window.is_none() {
+            if clicked_window.is_none() && self.mc_dragging_window.is_none() {
                 self.show_mission_control = false;
             }
         }
@@ -4425,6 +4646,71 @@ impl AuroraDesktopApp {
                         });
                     });
             });
+    }
+
+    // ── Keyboard shortcuts overlay ───────────────────────────────────────────
+
+    fn render_shortcuts_overlay(&mut self, ctx: &egui::Context) {
+        let screen = ctx.viewport_rect();
+        let painter = ctx.layer_painter(egui::LayerId::new(Order::Foreground, Id::new("shortcuts_bg")));
+        painter.rect_filled(screen, 0.0, Color32::from_rgba_unmultiplied(0, 0, 0, 160));
+
+        let shortcuts: &[(&str, &str)] = &[
+            ("Ctrl+Space", "Spotlight Search"),
+            ("F3 / Ctrl+Shift+Up", "Mission Control"),
+            ("F4", "Launchpad"),
+            ("Ctrl+Tab", "App Switcher"),
+            ("Ctrl+Left/Right", "Snap Window Half"),
+            ("Ctrl+Alt+Left/Right/Down", "Snap Window Third"),
+            ("Ctrl+W", "Close Window"),
+            ("Ctrl+M", "Minimize Window"),
+            ("Ctrl+Q", "Quit"),
+            ("Ctrl+Shift+E", "Embed External App"),
+            ("Escape", "Dismiss Overlay"),
+            ("Ctrl+C / X / V", "Copy / Cut / Paste"),
+            ("Ctrl+Z / Y", "Undo / Redo"),
+            ("Ctrl+S", "Save"),
+            ("Ctrl+/", "This Shortcuts Panel"),
+        ];
+
+        egui::Area::new(Id::new("shortcuts_overlay"))
+            .fixed_pos(Pos2::new(screen.center().x - 240.0, screen.top() + screen.height() * 0.12))
+            .order(Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::default()
+                    .fill(Color32::from_rgba_unmultiplied(40, 40, 45, 240))
+                    .stroke(Stroke::new(0.5, Color32::from_white_alpha(50)))
+                    .corner_radius(CornerRadius::same(14))
+                    .inner_margin(egui::Margin::symmetric(24, 20))
+                    .show(ui, |ui| {
+                        ui.set_min_width(440.0);
+                        ui.label(RichText::new("Keyboard Shortcuts").size(18.0).strong().color(Color32::WHITE));
+                        ui.add_space(12.0);
+
+                        for (key, desc) in shortcuts {
+                            ui.horizontal(|ui| {
+                                egui::Frame::default()
+                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 15))
+                                    .corner_radius(CornerRadius::same(4))
+                                    .inner_margin(egui::Margin::symmetric(8, 3))
+                                    .show(ui, |ui| {
+                                        ui.set_min_width(180.0);
+                                        ui.label(RichText::new(*key).size(12.0).color(Color32::from_gray(220)).family(egui::FontFamily::Monospace));
+                                    });
+                                ui.label(RichText::new(*desc).size(12.0).color(Color32::from_gray(170)));
+                            });
+                            ui.add_space(2.0);
+                        }
+
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("Press Escape or Ctrl+/ to close").size(11.0).color(Color32::from_gray(100)));
+                    });
+            });
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)
+            || (i.key_pressed(egui::Key::Slash) && i.modifiers.ctrl)) {
+            self.show_shortcuts_overlay = false;
+        }
     }
 
     // ── Edge-snap preview ────────────────────────────────────────────────────
@@ -5107,12 +5393,14 @@ impl eframe::App for AuroraDesktopApp {
             self.spotlight_query.clear();
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if self.show_launchpad { self.show_launchpad = false; }
+            if self.show_shortcuts_overlay { self.show_shortcuts_overlay = false; }
+            else if self.show_launchpad { self.show_launchpad = false; }
             else if self.show_mission_control { self.show_mission_control = false; }
             else {
                 self.show_spotlight = false;
                 self.show_control_center = false;
                 self.show_notifications = false;
+                self.show_downloads_stack = false;
                 self.show_wifi_popup = false;
                 self.show_volume_popup = false;
                 self.show_bluetooth_popup = false;
@@ -5139,6 +5427,7 @@ impl eframe::App for AuroraDesktopApp {
         self.render_windows(ctx, work_rect);
         self.render_edge_snap_preview(ctx, work_rect);
         self.render_dock(ctx);
+        if self.show_downloads_stack { self.render_downloads_stack(ctx); }
 
         if self.show_control_center { self.render_control_center(ctx); }
         if self.show_notifications { self.render_notification_center(ctx); }
@@ -5161,6 +5450,14 @@ impl eframe::App for AuroraDesktopApp {
 
         // App Switcher (Ctrl+Tab)
         self.handle_app_switcher(ctx);
+
+        // Keyboard shortcuts overlay (Ctrl+/)
+        if ctx.input(|i| i.key_pressed(egui::Key::Slash) && i.modifiers.ctrl) && !self.show_shortcuts_overlay {
+            self.show_shortcuts_overlay = true;
+        }
+        if self.show_shortcuts_overlay {
+            self.render_shortcuts_overlay(ctx);
+        }
 
         if !self.show_control_center && !self.show_notifications {
             self.render_fps_overlay(ctx);
