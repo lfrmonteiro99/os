@@ -1,9 +1,12 @@
 mod app_launcher;
 mod auto_save;
+mod browser;
 mod calculator;
 mod clipboard;
 mod embedded_app;
 mod file_index;
+mod icons;
+mod messages;
 mod notifications;
 mod process_manager;
 mod settings;
@@ -40,7 +43,10 @@ use terminal::{open_file_with_system, launch_program, PtyTerminal};
 use toast::Toast;
 use types::*;
 use app_launcher::AppCatalog;
+use browser::BrowserState;
 use embedded_app::EmbeddedApp;
+use messages::MessagesState;
+use toast::ToastManager;
 use window::{ManagedWindow, SnapSide};
 
 // ── Telemetry ────────────────────────────────────────────────────────────────
@@ -232,40 +238,6 @@ fn category_color(category: &str) -> Color32 {
     }
 }
 
-/// Get a short symbol for an app icon in the Launchpad grid.
-fn app_icon_symbol(name: &str) -> &str {
-    let lower = name.to_lowercase();
-    // Known apps get specific symbols
-    match lower.as_str() {
-        "terminal" => ">_",
-        "files" => "F",
-        "browser" | "safari" | "google chrome" | "firefox" | "microsoft edge" => "W",
-        "calculator" | "calc" => "C",
-        "notes" | "notepad" | "notepad++" => "N",
-        "music" | "spotify" => "M",
-        "photos" => "P",
-        "calendar" => "Cal",
-        "textedit" => "T",
-        "settings" | "system preferences" => "S",
-        "activity monitor" | "task manager" => "AM",
-        "messages" => "Msg",
-        "quick controls" => "QC",
-        "system overview" => "SO",
-        "paint" | "mspaint" => "Pa",
-        "discord" => "D",
-        "slack" => "Sl",
-        "steam" => "St",
-        "visual studio code" | "code" => "VS",
-        "word" | "microsoft word" => "W",
-        "excel" | "microsoft excel" => "X",
-        "powerpoint" | "microsoft powerpoint" => "PP",
-        "outlook" | "microsoft outlook" => "O",
-        _ => {
-            // Return first 2 chars
-            if name.len() >= 2 { &name[..2] } else { name }
-        }
-    }
-}
 
 fn paint_dock_icon(painter: &egui::Painter, rect: Rect, icon: DockIcon) {
     let rounding = CornerRadius::same((rect.width() * 0.22) as u8);
@@ -518,8 +490,15 @@ struct AuroraDesktopApp {
     editor_file_path: Option<PathBuf>,
     editor_content: String,
     editor_modified: bool,
+    // Browser state
+    browser_state: BrowserState,
+    browser_url_input: String,
+    // Messages state
+    messages_state: MessagesState,
     // Toast notifications
-    toasts: Vec<Toast>,
+    toast_manager: ToastManager,
+    // Snap preview animation
+    snap_preview_anim_start: Option<std::time::Instant>,
     // Spotlight: deferred file open
     spotlight_open_file: Option<PathBuf>,
     // Wallpaper
@@ -646,7 +625,11 @@ impl AuroraDesktopApp {
             editor_file_path: None,
             editor_content: String::new(),
             editor_modified: false,
-            toasts: Vec::new(),
+            browser_state: BrowserState::new(),
+            browser_url_input: String::new(),
+            messages_state: MessagesState::new(),
+            toast_manager: ToastManager::new(4),
+            snap_preview_anim_start: None,
             spotlight_open_file: None,
             wallpaper_idx: 0,
             show_login: true,
@@ -710,14 +693,14 @@ impl AuroraDesktopApp {
         if let Some(recovered_notes) = app.auto_save.load_recovery("notes") {
             if !recovered_notes.is_empty() && recovered_notes != app.notes_text {
                 app.notes_text = recovered_notes;
-                app.toasts.push(Toast::new("Recovery", "Notes restored from auto-save", Color32::from_rgb(255, 149, 0)));
+                app.toast_manager.push(Toast::new("Recovery", "Notes restored from auto-save", Color32::from_rgb(255, 149, 0)));
             }
         }
         if let Some(recovered_editor) = app.auto_save.load_recovery("editor") {
             if !recovered_editor.is_empty() {
                 app.editor_content = recovered_editor;
                 app.editor_modified = true;
-                app.toasts.push(Toast::new("Recovery", "Editor content restored from auto-save", Color32::from_rgb(255, 149, 0)));
+                app.toast_manager.push(Toast::new("Recovery", "Editor content restored from auto-save", Color32::from_rgb(255, 149, 0)));
             }
         }
         // Initialize real PTY terminal
@@ -725,11 +708,11 @@ impl AuroraDesktopApp {
             match PtyTerminal::new() {
                 Some(pty) => {
                     app.pty_terminal = Some(pty);
-                    app.toasts.push(Toast::new("Terminal Ready", "Real shell connected", Color32::from_rgb(52, 199, 89)));
+                    app.toast_manager.push(Toast::new("Terminal Ready", "Real shell connected", Color32::from_rgb(52, 199, 89)));
                     app.notification_center.notify("System", "Terminal Ready", "Real shell connected", Color32::from_rgb(52, 199, 89));
                 }
                 None => {
-                    app.toasts.push(Toast::new("Terminal", "Using built-in shell (PTY unavailable)", Color32::from_rgb(255, 149, 0)));
+                    app.toast_manager.push(Toast::new("Terminal", "Using built-in shell (PTY unavailable)", Color32::from_rgb(255, 149, 0)));
                 }
             }
         }
@@ -757,9 +740,14 @@ impl AuroraDesktopApp {
 
     fn snap_rect(work_rect: Rect, side: SnapSide) -> Rect {
         let hw = work_rect.width() * 0.5;
+        let tw = work_rect.width() / 3.0;
+        let h = work_rect.height();
         match side {
-            SnapSide::Left => Rect::from_min_size(work_rect.left_top(), Vec2::new(hw, work_rect.height())),
-            SnapSide::Right => Rect::from_min_size(Pos2::new(work_rect.left() + hw, work_rect.top()), Vec2::new(hw, work_rect.height())),
+            SnapSide::Left => Rect::from_min_size(work_rect.left_top(), Vec2::new(hw, h)),
+            SnapSide::Right => Rect::from_min_size(Pos2::new(work_rect.left() + hw, work_rect.top()), Vec2::new(hw, h)),
+            SnapSide::LeftThird => Rect::from_min_size(work_rect.left_top(), Vec2::new(tw, h)),
+            SnapSide::CenterThird => Rect::from_min_size(Pos2::new(work_rect.left() + tw, work_rect.top()), Vec2::new(tw, h)),
+            SnapSide::RightThird => Rect::from_min_size(Pos2::new(work_rect.left() + 2.0 * tw, work_rect.top()), Vec2::new(tw, h)),
         }
     }
 
@@ -862,7 +850,7 @@ impl AuroraDesktopApp {
                 if let Some(ref path) = self.editor_file_path {
                     if fs::write(path, self.editor_content.as_bytes()).is_ok() {
                         self.editor_modified = false;
-                        self.toasts.push(Toast::new("Saved", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
+                        self.toast_manager.push(Toast::new("Saved", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
                     }
                 }
             }
@@ -893,16 +881,28 @@ impl AuroraDesktopApp {
             return;
         }
 
-        // Ctrl+ArrowLeft / Ctrl+ArrowRight = snap window
-        let snap_left = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft) && i.modifiers.ctrl);
-        let snap_right = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight) && i.modifiers.ctrl);
-        if !(snap_left || snap_right) { return; }
+        // Ctrl+ArrowLeft / Ctrl+ArrowRight = snap window (halves)
+        // Ctrl+Alt+ArrowLeft / Right / Down = snap to thirds
+        let snap_left = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft) && i.modifiers.ctrl && !i.modifiers.alt);
+        let snap_right = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight) && i.modifiers.ctrl && !i.modifiers.alt);
+        let snap_left_third = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft) && i.modifiers.ctrl && i.modifiers.alt);
+        let snap_center_third = ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) && i.modifiers.ctrl && i.modifiers.alt);
+        let snap_right_third = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight) && i.modifiers.ctrl && i.modifiers.alt);
+
+        let side = if snap_left { Some(SnapSide::Left) }
+            else if snap_right { Some(SnapSide::Right) }
+            else if snap_left_third { Some(SnapSide::LeftThird) }
+            else if snap_center_third { Some(SnapSide::CenterThird) }
+            else if snap_right_third { Some(SnapSide::RightThird) }
+            else { None };
+
+        let Some(side) = side else { return };
         let Some(active) = self.active_window() else { return };
         let win = self.window_mut(active);
         win.restore();
         win.maximized = false;
-        win.snap = if snap_left { Some(SnapSide::Left) } else { Some(SnapSide::Right) };
-        let snapped = Self::snap_rect(work_rect, win.snap.unwrap());
+        win.snap = Some(side);
+        let snapped = Self::snap_rect(work_rect, side);
         win.default_pos = snapped.min;
         win.default_size = snapped.size();
         win.id_epoch = win.id_epoch.saturating_add(1);
@@ -1128,6 +1128,9 @@ impl AuroraDesktopApp {
                                         "Zoom" => self.menu_action = Some(MenuAction::Maximize),
                                         "Tile Left" => self.menu_action = Some(MenuAction::TileLeft),
                                         "Tile Right" => self.menu_action = Some(MenuAction::TileRight),
+                                        "Tile Left Third" => self.menu_action = Some(MenuAction::TileLeftThird),
+                                        "Tile Center Third" => self.menu_action = Some(MenuAction::TileCenterThird),
+                                        "Tile Right Third" => self.menu_action = Some(MenuAction::TileRightThird),
                                         "Bring All to Front" => self.menu_action = Some(MenuAction::BringAllToFront),
                                         "Copy" => self.menu_action = Some(MenuAction::Copy),
                                         "Cut" => self.menu_action = Some(MenuAction::Cut),
@@ -1253,7 +1256,7 @@ impl AuroraDesktopApp {
                                                 name = format!("New Folder ({n})");
                                             }
                                             if fs::create_dir_all(target.join(&name)).is_ok() {
-                                                self.toasts.push(Toast::new("Folder Created", &name, Color32::from_rgb(0, 122, 255)));
+                                                self.toast_manager.push(Toast::new("Folder Created", &name, Color32::from_rgb(0, 122, 255)));
                                                 // Refresh file manager if viewing the same dir
                                                 if self.fm_current_dir == target {
                                                     self.fm_entries = read_directory(&target);
@@ -1262,13 +1265,13 @@ impl AuroraDesktopApp {
                                         }
                                         "Change Wallpaper" => {
                                             self.wallpaper_idx = (self.wallpaper_idx + 1) % WALLPAPERS.len();
-                                            self.toasts.push(Toast::new("Wallpaper", format!("Switched to {}", WALLPAPERS[self.wallpaper_idx % WALLPAPERS.len()].name), Color32::from_rgb(88, 86, 214)));
+                                            self.toast_manager.push(Toast::new("Wallpaper", format!("Switched to {}", WALLPAPERS[self.wallpaper_idx % WALLPAPERS.len()].name), Color32::from_rgb(88, 86, 214)));
                                         }
                                         "Mission Control" => {
                                             self.show_mission_control = !self.show_mission_control;
                                         }
                                         "Get Info" => {
-                                            self.toasts.push(Toast::new("AuroraOS", format!("v0.1.0 | {} windows | {:.0} FPS", WINDOW_COUNT, self.fps_smoothed), Color32::from_rgb(142, 142, 147)));
+                                            self.toast_manager.push(Toast::new("AuroraOS", format!("v0.1.0 | {} windows | {:.0} FPS", WINDOW_COUNT, self.fps_smoothed), Color32::from_rgb(142, 142, 147)));
                                         }
                                         _ => {}
                                     }
@@ -1970,8 +1973,16 @@ impl AuroraDesktopApp {
         });
     }
 
-    fn content_messages(ui: &mut egui::Ui) {
+    fn content_messages(&mut self, ui: &mut egui::Ui) {
+        self.messages_state.tick();
+        // Snapshot conversation list for sidebar
+        let conv_data: Vec<(String, usize, usize)> = self.messages_state.conversations.iter().enumerate()
+            .map(|(i, c)| (c.contact_name.clone(), c.unread, i))
+            .collect();
+        let active_idx = self.messages_state.active;
+
         ui.horizontal(|ui| {
+            // Sidebar: conversation list
             egui::Frame::default()
                 .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 10))
                 .corner_radius(CornerRadius::same(6))
@@ -1980,81 +1991,201 @@ impl AuroraDesktopApp {
                     ui.set_min_width(120.0);
                     ui.label(RichText::new("Messages").size(11.0).strong().color(Color32::from_gray(160)));
                     ui.add_space(6.0);
-                    for (name, preview, selected) in [("Alice", "Hey! The new UI...", true), ("Bob", "Sure, sounds good", false),
-                        ("Team", "Build passed!", false), ("Carol", "See you tomorrow", false)] {
+                    for (name, unread, idx) in &conv_data {
+                        let selected = *idx == active_idx;
                         let bg = if selected { Color32::from_rgba_unmultiplied(0, 122, 255, 80) } else { Color32::TRANSPARENT };
-                        egui::Frame::default().fill(bg).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| {
-                            ui.label(RichText::new(name).size(12.0).strong().color(Color32::from_gray(230)));
-                            ui.label(RichText::new(preview).size(10.0).color(Color32::from_gray(150)));
-                        });
+                        let resp = egui::Frame::default().fill(bg).corner_radius(CornerRadius::same(6))
+                            .inner_margin(egui::Margin::symmetric(6, 4))
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new(name).size(12.0).strong().color(Color32::from_gray(230)));
+                                    if *unread > 0 {
+                                        ui.label(RichText::new(format!("({})", unread)).size(10.0).color(Color32::from_rgb(0, 122, 255)));
+                                    }
+                                });
+                                // Show last message preview
+                                if let Some(conv) = self.messages_state.conversations.get(*idx) {
+                                    if let Some(last) = conv.messages.last() {
+                                        let preview: String = last.text.chars().take(25).collect();
+                                        ui.label(RichText::new(preview).size(10.0).color(Color32::from_gray(150)));
+                                    }
+                                }
+                            }).response;
+                        if resp.interact(Sense::click()).clicked() {
+                            self.messages_state.switch_conversation(*idx);
+                        }
                         ui.add_space(2.0);
                     }
                 });
+
             ui.add_space(8.0);
+
+            // Chat area
             ui.vertical(|ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let messages: &[(&str, bool)] = &[
-                        ("Hey! How's the AuroraOS project going?", false),
-                        ("Going great! Just finished the desktop shell", true),
-                        ("The Big Sur wallpaper looks amazing", false),
-                        ("Thanks! The dock magnification was tricky", true),
-                        ("Can you show me a screenshot?", false),
-                        ("Sure, sending one now...", true),
-                        ("Hey! The new UI looks amazing", false),
-                    ];
-                    for (text, is_sent) in messages {
-                        let (align, color, tc) = if *is_sent {
-                            (Align::RIGHT, Color32::from_rgb(0, 122, 255), Color32::WHITE)
-                        } else {
-                            (Align::LEFT, Color32::from_rgba_unmultiplied(255, 255, 255, 40), Color32::from_gray(230))
-                        };
-                        ui.with_layout(Layout::top_down(align), |ui| {
-                            egui::Frame::default().fill(color).corner_radius(CornerRadius::same(14))
-                                .inner_margin(egui::Margin::symmetric(12, 6))
-                                .show(ui, |ui| { ui.set_max_width(220.0); ui.label(RichText::new(*text).size(12.0).color(tc)); });
-                        });
-                        ui.add_space(4.0);
+                // Messages scroll
+                egui::ScrollArea::vertical().stick_to_bottom(true).show(ui, |ui| {
+                    if let Some(conv) = self.messages_state.active_conversation() {
+                        for msg in &conv.messages {
+                            let (align, color, tc) = if msg.is_sent {
+                                (Align::RIGHT, Color32::from_rgb(0, 122, 255), Color32::WHITE)
+                            } else {
+                                (Align::LEFT, Color32::from_rgba_unmultiplied(255, 255, 255, 40), Color32::from_gray(230))
+                            };
+                            ui.with_layout(Layout::top_down(align), |ui| {
+                                egui::Frame::default().fill(color).corner_radius(CornerRadius::same(14))
+                                    .inner_margin(egui::Margin::symmetric(12, 6))
+                                    .show(ui, |ui| {
+                                        ui.set_max_width(220.0);
+                                        ui.label(RichText::new(&msg.text).size(12.0).color(tc));
+                                    });
+                            });
+                            ui.add_space(4.0);
+                        }
+                    }
+                });
+
+                // Input field
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(&mut self.messages_state.input_text)
+                            .desired_width(ui.available_width() - 60.0)
+                            .hint_text("Type a message...")
+                    );
+                    if ui.button("Send").clicked() || (resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
+                        self.messages_state.send_message();
                     }
                 });
             });
         });
     }
 
-    fn content_browser(ui: &mut egui::Ui) {
+    fn content_browser(&mut self, ui: &mut egui::Ui) {
+        // URL bar with back/forward
         egui::Frame::default()
             .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 15))
             .corner_radius(CornerRadius::same(8))
             .inner_margin(egui::Margin::symmetric(10, 5))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("<  >").size(13.0).color(Color32::from_gray(120)));
+                    let back_color = if self.browser_state.can_go_back() { Color32::from_gray(200) } else { Color32::from_gray(80) };
+                    let fwd_color = if self.browser_state.can_go_forward() { Color32::from_gray(200) } else { Color32::from_gray(80) };
+                    if ui.add(egui::Label::new(RichText::new("<").size(14.0).color(back_color)).sense(Sense::click())).clicked() {
+                        self.browser_state.go_back();
+                        self.browser_url_input = self.browser_state.url.clone();
+                    }
+                    if ui.add(egui::Label::new(RichText::new(">").size(14.0).color(fwd_color)).sense(Sense::click())).clicked() {
+                        self.browser_state.go_forward();
+                        self.browser_url_input = self.browser_state.url.clone();
+                    }
                     ui.add_space(8.0);
-                    egui::Frame::default()
-                        .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 20))
-                        .corner_radius(CornerRadius::same(6))
-                        .inner_margin(egui::Margin::symmetric(8, 3))
-                        .show(ui, |ui| { ui.set_min_width(300.0); ui.label(RichText::new("auroraos://favorites").size(12.0).color(Color32::from_gray(160))); });
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(&mut self.browser_url_input)
+                            .desired_width(ui.available_width() - 10.0)
+                            .font(FontId::proportional(12.0))
+                    );
+                    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        self.browser_state.navigate(&self.browser_url_input);
+                        self.browser_url_input = self.browser_state.url.clone();
+                    }
                 });
             });
+
         ui.add_space(10.0);
-        ui.label(RichText::new("Favorites").size(16.0).strong().color(Color32::from_gray(220)));
-        ui.add_space(8.0);
-        egui::Grid::new("browser_favorites").num_columns(4).spacing(Vec2::new(16.0, 14.0)).show(ui, |ui| {
-            let sites = [("Apple", Color32::from_rgb(142, 142, 147), "A"), ("Google", Color32::from_rgb(66, 133, 244), "G"),
-                ("GitHub", Color32::from_rgb(36, 41, 46), "GH"), ("Reddit", Color32::from_rgb(255, 69, 0), "R"),
-                ("Netflix", Color32::from_rgb(229, 9, 20), "N"), ("Rust", Color32::from_rgb(222, 165, 88), "Rs"),
-                ("Twitter", Color32::from_rgb(29, 161, 242), "T"), ("LinkedIn", Color32::from_rgb(0, 119, 181), "Li")];
-            for (i, (name, color, abbrev)) in sites.iter().enumerate() {
-                ui.vertical(|ui| {
-                    ui.set_min_width(70.0);
-                    let (ir, _) = ui.allocate_exact_size(Vec2::splat(44.0), Sense::click());
-                    ui.painter().rect_filled(ir, CornerRadius::same(10), *color);
-                    ui.painter().text(ir.center(), Align2::CENTER_CENTER, *abbrev, FontId::proportional(16.0), Color32::WHITE);
-                    ui.label(RichText::new(*name).size(10.0).color(Color32::from_gray(180)));
+
+        // Render page content
+        match &self.browser_state.page {
+            browser::BrowserPage::Favorites => {
+                ui.label(RichText::new("Favorites").size(16.0).strong().color(Color32::from_gray(220)));
+                ui.add_space(8.0);
+                let bookmarks: Vec<(String, String, Color32, String)> = self.browser_state.bookmarks.iter()
+                    .map(|b| (b.name.clone(), b.url.clone(), b.color, b.abbrev.clone()))
+                    .collect();
+                egui::Grid::new("browser_favorites").num_columns(4).spacing(Vec2::new(16.0, 14.0)).show(ui, |ui| {
+                    for (i, (name, url, color, abbrev)) in bookmarks.iter().enumerate() {
+                        ui.vertical(|ui| {
+                            ui.set_min_width(70.0);
+                            let (ir, icon_resp) = ui.allocate_exact_size(Vec2::splat(44.0), Sense::click());
+                            ui.painter().rect_filled(ir, CornerRadius::same(10), *color);
+                            ui.painter().text(ir.center(), Align2::CENTER_CENTER, abbrev, FontId::proportional(16.0), Color32::WHITE);
+                            let resp = ui.add(egui::Label::new(RichText::new(name).size(10.0).color(Color32::from_gray(180))).sense(Sense::click()));
+                            if icon_resp.clicked() || resp.clicked() {
+                                self.browser_state.navigate(url);
+                                self.browser_url_input = self.browser_state.url.clone();
+                            }
+                        });
+                        if (i + 1) % 4 == 0 { ui.end_row(); }
+                    }
                 });
-                if (i + 1) % 4 == 0 { ui.end_row(); }
             }
-        });
+            browser::BrowserPage::MockSite { title, sections } => {
+                let title = title.clone();
+                let sections: Vec<_> = sections.clone();
+                ui.label(RichText::new(&title).size(18.0).strong().color(Color32::from_gray(230)));
+                ui.add_space(8.0);
+                for section in &sections {
+                    match &section.kind {
+                        browser::SectionKind::Heading => {
+                            ui.label(RichText::new(&section.text).size(15.0).strong().color(Color32::from_gray(220)));
+                            ui.add_space(4.0);
+                        }
+                        browser::SectionKind::Paragraph => {
+                            ui.label(RichText::new(&section.text).size(12.0).color(Color32::from_gray(170)));
+                            ui.add_space(4.0);
+                        }
+                        browser::SectionKind::Image { color, height } => {
+                            let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), *height), Sense::hover());
+                            ui.painter().rect_filled(r, CornerRadius::same(6), *color);
+                            ui.painter().text(r.center(), Align2::CENTER_CENTER, &section.text, FontId::proportional(14.0), Color32::WHITE);
+                            ui.add_space(4.0);
+                        }
+                        browser::SectionKind::Link { url } => {
+                            let url = url.clone();
+                            let resp = ui.add(egui::Label::new(
+                                RichText::new(&section.text).size(12.0).color(Color32::from_rgb(0, 122, 255)).underline()
+                            ).sense(Sense::click()));
+                            if resp.clicked() && url != "#" {
+                                self.browser_state.navigate(&url);
+                                self.browser_url_input = self.browser_state.url.clone();
+                            }
+                            ui.add_space(2.0);
+                        }
+                        browser::SectionKind::SearchBar => {
+                            // Decorative search bar
+                            egui::Frame::default()
+                                .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 20))
+                                .corner_radius(CornerRadius::same(6))
+                                .inner_margin(egui::Margin::symmetric(8, 4))
+                                .show(ui, |ui| {
+                                    ui.label(RichText::new(if section.text.is_empty() { "Search..." } else { &section.text })
+                                        .size(12.0).color(Color32::from_gray(140)));
+                                });
+                            ui.add_space(4.0);
+                        }
+                        browser::SectionKind::CodeBlock => {
+                            egui::Frame::default()
+                                .fill(Color32::from_rgba_unmultiplied(0, 0, 0, 60))
+                                .corner_radius(CornerRadius::same(6))
+                                .inner_margin(egui::Margin::symmetric(10, 8))
+                                .show(ui, |ui| {
+                                    ui.label(RichText::new(&section.text).size(11.0).color(Color32::from_gray(180))
+                                        .family(egui::FontFamily::Monospace));
+                                });
+                            ui.add_space(4.0);
+                        }
+                    }
+                }
+            }
+            browser::BrowserPage::NotFound { url } => {
+                let url = url.clone();
+                ui.add_space(40.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("Page Not Found").size(20.0).strong().color(Color32::from_gray(200)));
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(format!("Cannot connect to {}", url)).size(12.0).color(Color32::from_gray(140)));
+                });
+            }
+        }
     }
 
     fn content_calculator(ui: &mut egui::Ui, display: &mut String, operand: &mut Option<f64>, operator: &mut Option<char>, reset_next: &mut bool) {
@@ -2443,14 +2574,14 @@ impl AuroraDesktopApp {
                 win.close_anim_start = None;
                 win.id_epoch = win.id_epoch.saturating_add(1);
                 self.bring_to_front(WindowKind::TextEditor);
-                self.toasts.push(Toast::new(
+                self.toast_manager.push(Toast::new(
                     "File Opened",
                     path.file_name().and_then(|n| n.to_str()).unwrap_or("file"),
                     Color32::from_rgb(52, 199, 89),
                 ));
             }
             Err(e) => {
-                self.toasts.push(Toast::new(
+                self.toast_manager.push(Toast::new(
                     "Error",
                     format!("Cannot open file: {e}"),
                     Color32::from_rgb(255, 59, 48),
@@ -2771,21 +2902,18 @@ impl AuroraDesktopApp {
     // ── Toast notifications ──────────────────────────────────────────────────
 
     fn render_toasts(&mut self, ctx: &egui::Context) {
-        self.toasts.retain(|t| !t.is_expired());
+        self.toast_manager.tick();
         let screen = ctx.viewport_rect();
         let toast_w = 300.0;
         let toast_h = 60.0;
 
-        for (i, toast) in self.toasts.iter().enumerate() {
-            let progress = toast.progress();
-            // Slide in from right, slide out at end
-            let slide = if progress < 0.1 {
-                progress / 0.1  // slide in
-            } else if progress > 0.85 {
-                (1.0 - progress) / 0.15  // slide out
-            } else {
-                1.0
-            };
+        // Collect visible toasts data to avoid borrow conflict
+        let visible: Vec<(String, String, Color32, f32)> = self.toast_manager.visible()
+            .map(|t| (t.title.clone(), t.body.clone(), t.color, t.slide_factor()))
+            .collect();
+        let overflow = self.toast_manager.overflow_count();
+
+        for (i, (title, body, color, slide)) in visible.iter().enumerate() {
             let x = screen.right() - toast_w - 16.0 + (1.0 - slide) * (toast_w + 20.0);
             let y = screen.top() + MENU_BAR_HEIGHT + 12.0 + i as f32 * (toast_h + 8.0);
 
@@ -2803,13 +2931,25 @@ impl AuroraDesktopApp {
                             ui.set_min_width(toast_w - 24.0);
                             ui.horizontal(|ui| {
                                 let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
-                                ui.painter().circle_filled(dot.center(), 5.0, toast.color);
+                                ui.painter().circle_filled(dot.center(), 5.0, *color);
                                 ui.vertical(|ui| {
-                                    ui.label(RichText::new(&toast.title).size(12.0).strong().color(Color32::WHITE));
-                                    ui.label(RichText::new(&toast.body).size(11.0).color(Color32::from_gray(160)));
+                                    ui.label(RichText::new(title).size(12.0).strong().color(Color32::WHITE));
+                                    ui.label(RichText::new(body).size(11.0).color(Color32::from_gray(160)));
                                 });
                             });
                         });
+                });
+        }
+
+        // Overflow indicator
+        if overflow > 0 {
+            let y = screen.top() + MENU_BAR_HEIGHT + 12.0 + visible.len() as f32 * (toast_h + 8.0);
+            egui::Area::new(Id::new("toast_overflow"))
+                .fixed_pos(Pos2::new(screen.right() - toast_w - 16.0, y))
+                .order(Order::Foreground)
+                .interactable(false)
+                .show(ctx, |ui| {
+                    ui.label(RichText::new(format!("+{} more", overflow)).size(11.0).color(Color32::from_gray(120)));
                 });
         }
     }
@@ -3003,8 +3143,8 @@ impl AuroraDesktopApp {
                             }
                         }
                         WindowKind::Controls => Self::content_controls(ui),
-                        WindowKind::Messages => Self::content_messages(ui),
-                        WindowKind::Browser => Self::content_browser(ui),
+                        WindowKind::Messages => self.content_messages(ui),
+                        WindowKind::Browser => self.content_browser(ui),
                         WindowKind::Calculator => Self::content_calculator(ui,
                             &mut self.calc_display, &mut self.calc_operand,
                             &mut self.calc_operator, &mut self.calc_reset_next),
@@ -3778,8 +3918,8 @@ impl AuroraDesktopApp {
                                         if let Some(program) = parts.first() {
                                             let args: Vec<&str> = parts[1..].to_vec();
                                             match launch_program(program, &args) {
-                                                Ok(()) => self.toasts.push(Toast::new("Launched", *program, Color32::from_rgb(52, 199, 89))),
-                                                Err(e) => self.toasts.push(Toast::new("Error", e, Color32::from_rgb(255, 59, 48))),
+                                                Ok(()) => self.toast_manager.push(Toast::new("Launched", *program, Color32::from_rgb(52, 199, 89))),
+                                                Err(e) => self.toast_manager.push(Toast::new("Error", e, Color32::from_rgb(255, 59, 48))),
                                             }
                                         }
                                     }
@@ -4082,12 +4222,22 @@ impl AuroraDesktopApp {
             let edge_threshold = 8.0;
             self.drag_snap_preview = None;
             self.drag_snap_maximize = false;
-            if pos.x <= work_rect.left() + edge_threshold {
-                self.drag_snap_preview = Some(SnapSide::Left);
-            } else if pos.x >= work_rect.right() - edge_threshold {
-                self.drag_snap_preview = Some(SnapSide::Right);
-            } else if pos.y <= work_rect.top() + edge_threshold {
+
+            if pos.y <= work_rect.top() + edge_threshold {
                 self.drag_snap_maximize = true;
+            } else if pos.x <= work_rect.left() + edge_threshold {
+                // Alt held = left third, otherwise left half
+                let alt = ctx.input(|i| i.modifiers.alt);
+                self.drag_snap_preview = Some(if alt { SnapSide::LeftThird } else { SnapSide::Left });
+            } else if pos.x >= work_rect.right() - edge_threshold {
+                let alt = ctx.input(|i| i.modifiers.alt);
+                self.drag_snap_preview = Some(if alt { SnapSide::RightThird } else { SnapSide::Right });
+            } else if pos.y >= work_rect.bottom() - edge_threshold {
+                // Bottom edge + alt = center third
+                let alt = ctx.input(|i| i.modifiers.alt);
+                if alt {
+                    self.drag_snap_preview = Some(SnapSide::CenterThird);
+                }
             }
         }
     }
@@ -4316,15 +4466,8 @@ impl AuroraDesktopApp {
                     // Background
                     painter.rect_filled(scaled_rect, CornerRadius::same(14), bg);
 
-                    // Icon symbol — first letter(s) or category icon
-                    let symbol = app_icon_symbol(&app.name);
-                    painter.text(
-                        scaled_rect.center(),
-                        Align2::CENTER_CENTER,
-                        symbol,
-                        FontId::proportional(icon_size * 0.35 * hover_scale),
-                        Color32::WHITE,
-                    );
+                    // Icon drawn with painter primitives
+                    icons::paint_app_icon(&painter, scaled_rect, &app.name, &app.category);
 
                     // App name below icon
                     let name_pos = Pos2::new(cx, cy + icon_size + 10.0);
@@ -4450,7 +4593,7 @@ impl AuroraDesktopApp {
             Err(e) => {
                 // Fallback: open normally in Windows if embedding fails
                 open_file_with_system(path);
-                self.toasts.push(Toast::new(
+                self.toast_manager.push(Toast::new(
                     "Launched externally",
                     format!("{} (embed failed: {})", name, e),
                     Color32::from_rgb(255, 214, 10),
@@ -4783,7 +4926,7 @@ impl eframe::App for AuroraDesktopApp {
         self.render_confirm_close(ctx);
 
         // Toast notifications
-        if !self.toasts.is_empty() {
+        if !self.toast_manager.is_empty() {
             self.render_toasts(ctx);
         }
 
@@ -4866,6 +5009,23 @@ impl eframe::App for AuroraDesktopApp {
                         win.maximized = false;
                         win.snap = Some(SnapSide::Right);
                         let snapped = Self::snap_rect(work_rect, SnapSide::Right);
+                        win.default_pos = snapped.min;
+                        win.default_size = snapped.size();
+                        win.id_epoch = win.id_epoch.saturating_add(1);
+                    }
+                }
+                MenuAction::TileLeftThird | MenuAction::TileCenterThird | MenuAction::TileRightThird => {
+                    let side = match action {
+                        MenuAction::TileLeftThird => SnapSide::LeftThird,
+                        MenuAction::TileCenterThird => SnapSide::CenterThird,
+                        _ => SnapSide::RightThird,
+                    };
+                    if let Some(kind) = self.active_window() {
+                        let win = self.window_mut(kind);
+                        win.restore();
+                        win.maximized = false;
+                        win.snap = Some(side);
+                        let snapped = Self::snap_rect(work_rect, side);
                         win.default_pos = snapped.min;
                         win.default_size = snapped.size();
                         win.id_epoch = win.id_epoch.saturating_add(1);
@@ -4979,7 +5139,7 @@ impl eframe::App for AuroraDesktopApp {
                 self.open_file_in_editor(path);
             } else {
                 open_file_with_system(&path);
-                self.toasts.push(Toast::new("File Opened", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
+                self.toast_manager.push(Toast::new("File Opened", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
             }
             self.show_spotlight = false;
             self.spotlight_query.clear();
@@ -4999,7 +5159,7 @@ impl eframe::App for AuroraDesktopApp {
                             win.open = true;
                             win.minimized = false;
                             self.bring_to_front(WindowKind::FileManager);
-                            self.toasts.push(Toast::new("Folder Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("folder"), Color32::from_rgb(0, 122, 255)));
+                            self.toast_manager.push(Toast::new("Folder Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("folder"), Color32::from_rgb(0, 122, 255)));
                         } else if pb.extension().and_then(|e| e.to_str()).map(|e| terminal::is_text_extension(e)).unwrap_or(false) {
                             // Open text file in editor
                             if let Ok(content) = fs::read_to_string(&pb) {
@@ -5011,7 +5171,7 @@ impl eframe::App for AuroraDesktopApp {
                                 win.minimized = false;
                                 win.id_epoch = win.id_epoch.saturating_add(1);
                                 self.bring_to_front(WindowKind::TextEditor);
-                                self.toasts.push(Toast::new("File Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
+                                self.toast_manager.push(Toast::new("File Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
                             }
                         } else {
                             // Image files: offer as wallpaper
@@ -5022,7 +5182,7 @@ impl eframe::App for AuroraDesktopApp {
                             } else {
                                 open_file_with_system(&pb);
                             }
-                            self.toasts.push(Toast::new("File Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
+                            self.toast_manager.push(Toast::new("File Opened", pb.file_name().and_then(|n| n.to_str()).unwrap_or("file"), Color32::from_rgb(52, 199, 89)));
                         }
                     }
                 }

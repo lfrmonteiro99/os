@@ -179,7 +179,7 @@ impl MenuDropdown {
             Self::File => &["New Window", "Open...", "Save", "---", "Close Window  Ctrl+W", "---", "Quit  Ctrl+Q"],
             Self::Edit => &["Undo  Ctrl+Z", "Redo  Ctrl+Y", "---", "Cut  Ctrl+X", "Copy  Ctrl+C", "Paste  Ctrl+V", "---", "Select All  Ctrl+A"],
             Self::View => &["Enter Full Screen", "---", "Show Sidebar", "Show Status Bar"],
-            Self::Window => &["Minimize  Ctrl+M", "Zoom", "---", "Tile Left", "Tile Right", "---", "Bring All to Front"],
+            Self::Window => &["Minimize  Ctrl+M", "Zoom", "---", "Tile Left", "Tile Right", "---", "Tile Left Third", "Tile Center Third", "Tile Right Third", "---", "Bring All to Front"],
             Self::Help => &["AuroraOS Help", "---", "About AuroraOS"],
         }
     }
@@ -193,6 +193,9 @@ pub enum MenuAction {
     Maximize,
     TileLeft,
     TileRight,
+    TileLeftThird,
+    TileCenterThird,
+    TileRightThird,
     BringAllToFront,
     Copy,
     Cut,

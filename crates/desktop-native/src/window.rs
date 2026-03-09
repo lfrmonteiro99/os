@@ -5,6 +5,9 @@ use eframe::egui::{Pos2, Rect, Vec2};
 pub enum SnapSide {
     Left,
     Right,
+    LeftThird,
+    CenterThird,
+    RightThird,
 }
 
 #[derive(Clone, Copy)]
@@ -145,10 +148,16 @@ impl ManagedWindow {
 /// Compute snap rect for a given side within a work area
 #[allow(dead_code)]
 pub fn snap_rect(work_rect: Rect, side: SnapSide) -> Rect {
-    let hw = work_rect.width() * 0.5;
+    let w = work_rect.width();
+    let h = work_rect.height();
+    let top = work_rect.top();
+    let left = work_rect.left();
     match side {
-        SnapSide::Left => Rect::from_min_size(work_rect.left_top(), Vec2::new(hw, work_rect.height())),
-        SnapSide::Right => Rect::from_min_size(Pos2::new(work_rect.left() + hw, work_rect.top()), Vec2::new(hw, work_rect.height())),
+        SnapSide::Left => Rect::from_min_size(work_rect.left_top(), Vec2::new(w * 0.5, h)),
+        SnapSide::Right => Rect::from_min_size(Pos2::new(left + w * 0.5, top), Vec2::new(w * 0.5, h)),
+        SnapSide::LeftThird => Rect::from_min_size(work_rect.left_top(), Vec2::new(w / 3.0, h)),
+        SnapSide::CenterThird => Rect::from_min_size(Pos2::new(left + w / 3.0, top), Vec2::new(w / 3.0, h)),
+        SnapSide::RightThird => Rect::from_min_size(Pos2::new(left + w * 2.0 / 3.0, top), Vec2::new(w / 3.0, h)),
     }
 }
 
@@ -343,5 +352,53 @@ mod tests {
         assert_eq!(l.width(), 400.0);
         assert_eq!(r.left(), 500.0);
         assert_eq!(r.width(), 400.0);
+    }
+
+    // ── Snap thirds ─────────────────────────────────────────────────────
+
+    #[test]
+    fn snap_left_third() {
+        let work = Rect::from_min_size(Pos2::new(0.0, 34.0), Vec2::new(1440.0, 800.0));
+        let r = snap_rect(work, SnapSide::LeftThird);
+        assert_eq!(r.left(), 0.0);
+        assert!((r.width() - 480.0).abs() < 0.1);
+        assert_eq!(r.height(), 800.0);
+    }
+
+    #[test]
+    fn snap_center_third() {
+        let work = Rect::from_min_size(Pos2::new(0.0, 34.0), Vec2::new(1440.0, 800.0));
+        let r = snap_rect(work, SnapSide::CenterThird);
+        assert!((r.left() - 480.0).abs() < 0.1);
+        assert!((r.width() - 480.0).abs() < 0.1);
+        assert_eq!(r.top(), 34.0);
+    }
+
+    #[test]
+    fn snap_right_third() {
+        let work = Rect::from_min_size(Pos2::new(0.0, 34.0), Vec2::new(1440.0, 800.0));
+        let r = snap_rect(work, SnapSide::RightThird);
+        assert!((r.left() - 960.0).abs() < 0.1);
+        assert!((r.width() - 480.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn thirds_cover_full_width() {
+        let work = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(900.0, 600.0));
+        let l = snap_rect(work, SnapSide::LeftThird);
+        let c = snap_rect(work, SnapSide::CenterThird);
+        let r = snap_rect(work, SnapSide::RightThird);
+        let total = l.width() + c.width() + r.width();
+        assert!((total - 900.0).abs() < 0.1, "Thirds should cover full width, got {}", total);
+    }
+
+    #[test]
+    fn thirds_are_contiguous() {
+        let work = Rect::from_min_size(Pos2::new(50.0, 30.0), Vec2::new(1200.0, 700.0));
+        let l = snap_rect(work, SnapSide::LeftThird);
+        let c = snap_rect(work, SnapSide::CenterThird);
+        let r = snap_rect(work, SnapSide::RightThird);
+        assert!((l.right() - c.left()).abs() < 0.1);
+        assert!((c.right() - r.left()).abs() < 0.1);
     }
 }
