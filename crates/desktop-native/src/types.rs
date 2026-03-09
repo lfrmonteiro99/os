@@ -72,7 +72,7 @@ pub enum DockIcon {
     Terminal,
     Browser,
     Overview,
-    Mail,
+    Launchpad,
     Messages,
     Notes,
     Calendar,
@@ -90,7 +90,7 @@ impl DockIcon {
     pub fn all() -> &'static [Self] {
         &[
             Self::Files, Self::Terminal, Self::Browser, Self::Messages,
-            Self::Overview, Self::Mail, Self::Notes, Self::Calendar,
+            Self::Overview, Self::Launchpad, Self::Notes, Self::Calendar,
             Self::Music, Self::Photos, Self::Calculator, Self::Settings,
             Self::Store, Self::Separator, Self::Controls, Self::Info,
         ]
@@ -102,7 +102,7 @@ impl DockIcon {
             Self::Terminal => "Terminal",
             Self::Browser => "Browser",
             Self::Overview => "System Overview",
-            Self::Mail => "Mail",
+            Self::Launchpad => "Launchpad",
             Self::Messages => "Messages",
             Self::Notes => "Notes",
             Self::Calendar => "Calendar",
@@ -123,7 +123,7 @@ impl DockIcon {
             Self::Terminal => Color32::from_rgb(30, 30, 46),
             Self::Browser => Color32::from_rgb(0, 180, 216),
             Self::Overview => Color32::from_rgb(52, 199, 89),
-            Self::Mail => Color32::from_rgb(88, 86, 214),
+            Self::Launchpad => Color32::from_rgb(88, 86, 214),
             Self::Messages => Color32::from_rgb(76, 217, 100),
             Self::Notes => Color32::from_rgb(255, 214, 10),
             Self::Calendar => Color32::WHITE,
@@ -201,6 +201,7 @@ pub enum MenuAction {
     Undo,
     Redo,
     Save,
+    ToggleFullScreen,
 }
 
 

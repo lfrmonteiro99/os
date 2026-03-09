@@ -1,6 +1,8 @@
+mod app_launcher;
 mod auto_save;
 mod calculator;
 mod clipboard;
+mod embedded_app;
 mod file_index;
 mod notifications;
 mod process_manager;
@@ -37,6 +39,8 @@ use settings::AppSettings;
 use terminal::{open_file_with_system, launch_program, PtyTerminal};
 use toast::Toast;
 use types::*;
+use app_launcher::AppCatalog;
+use embedded_app::EmbeddedApp;
 use window::{ManagedWindow, SnapSide};
 
 // ── Telemetry ────────────────────────────────────────────────────────────────
@@ -213,6 +217,56 @@ fn paint_hill(
 
 // ── Dock icon painting ───────────────────────────────────────────────────────
 
+fn category_color(category: &str) -> Color32 {
+    match category {
+        "System" => Color32::from_rgb(142, 142, 147),
+        "Utilities" => Color32::from_rgb(90, 200, 250),
+        "Internet" => Color32::from_rgb(0, 122, 255),
+        "Productivity" => Color32::from_rgb(255, 149, 0),
+        "Media" => Color32::from_rgb(255, 55, 95),
+        "Communication" => Color32::from_rgb(76, 217, 100),
+        "Development" => Color32::from_rgb(88, 86, 214),
+        "Games" => Color32::from_rgb(255, 45, 85),
+        "Graphics" => Color32::from_rgb(175, 82, 222),
+        _ => Color32::from_rgb(100, 100, 120),
+    }
+}
+
+/// Get a short symbol for an app icon in the Launchpad grid.
+fn app_icon_symbol(name: &str) -> &str {
+    let lower = name.to_lowercase();
+    // Known apps get specific symbols
+    match lower.as_str() {
+        "terminal" => ">_",
+        "files" => "F",
+        "browser" | "safari" | "google chrome" | "firefox" | "microsoft edge" => "W",
+        "calculator" | "calc" => "C",
+        "notes" | "notepad" | "notepad++" => "N",
+        "music" | "spotify" => "M",
+        "photos" => "P",
+        "calendar" => "Cal",
+        "textedit" => "T",
+        "settings" | "system preferences" => "S",
+        "activity monitor" | "task manager" => "AM",
+        "messages" => "Msg",
+        "quick controls" => "QC",
+        "system overview" => "SO",
+        "paint" | "mspaint" => "Pa",
+        "discord" => "D",
+        "slack" => "Sl",
+        "steam" => "St",
+        "visual studio code" | "code" => "VS",
+        "word" | "microsoft word" => "W",
+        "excel" | "microsoft excel" => "X",
+        "powerpoint" | "microsoft powerpoint" => "PP",
+        "outlook" | "microsoft outlook" => "O",
+        _ => {
+            // Return first 2 chars
+            if name.len() >= 2 { &name[..2] } else { name }
+        }
+    }
+}
+
 fn paint_dock_icon(painter: &egui::Painter, rect: Rect, icon: DockIcon) {
     let rounding = CornerRadius::same((rect.width() * 0.22) as u8);
     let s = rect.width();
@@ -266,11 +320,19 @@ fn paint_dock_icon(painter: &egui::Painter, rect: Rect, icon: DockIcon) {
                 painter.rect_filled(bar, CornerRadius::same((bar_h * 0.5) as u8), white);
             }
         }
-        DockIcon::Mail => {
-            let body = inner.shrink2(Vec2::new(0.0, inner.height() * 0.1));
-            painter.rect_stroke(body, CornerRadius::same(2), Stroke::new(line_w, white), StrokeKind::Outside);
-            painter.line_segment([body.left_top(), Pos2::new(body.center().x, body.center().y + 2.0)], Stroke::new(line_w, white));
-            painter.line_segment([body.right_top(), Pos2::new(body.center().x, body.center().y + 2.0)], Stroke::new(line_w, white));
+        DockIcon::Launchpad => {
+            // 3x3 grid of circles (like macOS Launchpad icon)
+            let grid_size = inner.width() * 0.7;
+            let origin = Pos2::new(c.x - grid_size * 0.5, c.y - grid_size * 0.5);
+            let dot_r = grid_size * 0.12;
+            let spacing = grid_size * 0.35;
+            for row in 0..3 {
+                for col in 0..3 {
+                    let cx = origin.x + col as f32 * spacing + spacing * 0.5;
+                    let cy = origin.y + row as f32 * spacing + spacing * 0.5;
+                    painter.circle_filled(Pos2::new(cx, cy), dot_r, white);
+                }
+            }
         }
         DockIcon::Messages => {
             let r = inner.width() * 0.38;
@@ -503,6 +565,18 @@ struct AuroraDesktopApp {
     fm_show_new_dialog: bool,
     fm_new_name: String,
     fm_new_is_dir: bool,
+    // Launchpad (Application Grid)
+    show_launchpad: bool,
+    launchpad_query: String,
+    app_catalog: AppCatalog,
+    launchpad_page: usize,
+    // Embedded Windows apps
+    embedded_apps: Vec<EmbeddedApp>,
+    embed_launch_input: String,
+    show_embed_launcher: bool,
+    /// Our own HWND (cached on first frame) — stored as raw pointer on Windows
+    #[cfg(windows)]
+    own_hwnd: Option<*mut std::ffi::c_void>,
 }
 
 impl AuroraDesktopApp {
@@ -603,6 +677,15 @@ impl AuroraDesktopApp {
             fm_show_new_dialog: false,
             fm_new_name: String::new(),
             fm_new_is_dir: true,
+            show_launchpad: false,
+            launchpad_query: String::new(),
+            app_catalog: AppCatalog::new(),
+            launchpad_page: 0,
+            embedded_apps: Vec::new(),
+            embed_launch_input: String::new(),
+            show_embed_launcher: false,
+            #[cfg(windows)]
+            own_hwnd: None,
         };
         // New app windows start closed — opened via dock clicks
         app.windows[WindowKind::Calculator as usize].open = false;
@@ -753,6 +836,13 @@ impl AuroraDesktopApp {
             self.save_state();
             self.should_quit = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+
+        // F11 = toggle fullscreen
+        if ctx.input(|i| i.key_pressed(egui::Key::F11)) {
+            let is_fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!is_fullscreen));
             return;
         }
 
@@ -1046,6 +1136,7 @@ impl AuroraDesktopApp {
                                         "Undo" => self.menu_action = Some(MenuAction::Undo),
                                         "Redo" => self.menu_action = Some(MenuAction::Redo),
                                         "Save" => self.menu_action = Some(MenuAction::Save),
+                                        "Enter Full Screen" => self.menu_action = Some(MenuAction::ToggleFullScreen),
                                         _ => {}
                                     }
                                 }
@@ -1728,6 +1819,7 @@ impl AuroraDesktopApp {
                 .inner_margin(egui::Margin::symmetric(8, 8))
                 .show(ui, |ui| {
                     ui.set_min_width(130.0);
+                    ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
                     ui.label(RichText::new("Favorites").size(10.0).strong().color(Color32::from_gray(140)));
                     ui.add_space(4.0);
                     let favorites = [("Home", home.clone()), ("Desktop", home.join("Desktop")),
@@ -1753,6 +1845,7 @@ impl AuroraDesktopApp {
                             navigate_to = Some(disk.mount_point().to_path_buf());
                         }
                     }
+                    }); // end with_layout
                 });
 
             ui.add_space(8.0);
@@ -3200,7 +3293,15 @@ impl AuroraDesktopApp {
                                     let clicked = response.clicked();
                                     response.on_hover_text(icon.label());
                                     if clicked {
-                                        if let Some(wk) = icon.window_kind() {
+                                        if *icon == DockIcon::Launchpad {
+                                            self.show_launchpad = !self.show_launchpad;
+                                            self.launchpad_query.clear();
+                                            self.launchpad_page = 0;
+                                            self.dock_bounce = Some((*icon, Instant::now()));
+                                        } else if *icon == DockIcon::Store {
+                                            self.show_embed_launcher = !self.show_embed_launcher;
+                                            self.dock_bounce = Some((*icon, Instant::now()));
+                                        } else if let Some(wk) = icon.window_kind() {
                                             open_window = Some(wk);
                                             self.dock_bounce = Some((*icon, Instant::now()));
                                         }
@@ -4106,6 +4207,473 @@ impl AuroraDesktopApp {
             }
         }
     }
+
+    // ── Launchpad (Application Grid) ──────────────────────────────────────
+
+    fn render_launchpad(&mut self, ctx: &egui::Context) {
+        let screen = ctx.content_rect();
+
+        // Dimmed backdrop
+        let painter = ctx.layer_painter(egui::LayerId::new(Order::Foreground, Id::new("launchpad_bg")));
+        painter.rect_filled(screen, 0.0, Color32::from_rgba_unmultiplied(0, 0, 0, 160));
+
+        // Clone filtered results to avoid borrow conflict with the closure
+        let filtered: Vec<app_launcher::AppEntry> = self.app_catalog.search(&self.launchpad_query)
+            .into_iter().cloned().collect();
+
+        // Layout constants
+        let cols = 7_usize;
+        let rows_per_page = 5_usize;
+        let items_per_page = cols * rows_per_page;
+        let total_pages = (filtered.len() + items_per_page - 1).max(1) / items_per_page.max(1);
+        let page = self.launchpad_page.min(total_pages.saturating_sub(1));
+
+        let page_start = page * items_per_page;
+        let page_end = (page_start + items_per_page).min(filtered.len());
+        let page_items = &filtered[page_start..page_end.min(filtered.len())];
+
+        let icon_size = 64.0_f32;
+        let cell_w = 110.0_f32;
+        let cell_h = 100.0_f32;
+        let grid_w = cols as f32 * cell_w;
+        let grid_h = rows_per_page as f32 * cell_h;
+        let grid_x = (screen.width() - grid_w) * 0.5;
+        let search_y = screen.top() + 60.0;
+        let grid_y = search_y + 70.0;
+
+        let mut open_app: Option<String> = None;
+        let mut launch_external: Option<PathBuf> = None;
+
+        egui::Area::new(Id::new("launchpad"))
+            .fixed_pos(Pos2::new(0.0, 0.0))
+            .order(Order::Foreground)
+            .show(ctx, |ui| {
+                ui.set_min_size(screen.size());
+
+                // Search bar
+                let search_x = (screen.width() - 300.0) * 0.5;
+                ui.put(
+                    Rect::from_min_size(Pos2::new(search_x, search_y), Vec2::new(300.0, 36.0)),
+                    |ui: &mut egui::Ui| {
+                        egui::Frame::new()
+                            .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 25))
+                            .corner_radius(CornerRadius::same(10))
+                            .inner_margin(egui::Margin::symmetric(12, 6))
+                            .show(ui, |ui| {
+                                let te = egui::TextEdit::singleline(&mut self.launchpad_query)
+                                    .hint_text("Search apps...")
+                                    .font(FontId::proportional(16.0))
+                                    .text_color(Color32::WHITE)
+                                    .desired_width(260.0)
+                                    .frame(false);
+                                let resp = ui.add(te);
+                                if !resp.has_focus() && self.launchpad_query.is_empty() {
+                                    resp.request_focus();
+                                }
+                                // Reset page on query change
+                                if resp.changed() {
+                                    self.launchpad_page = 0;
+                                }
+                            })
+                            .response
+                    },
+                );
+
+                // App grid
+                for (i, app) in page_items.iter().enumerate() {
+                    let col = i % cols;
+                    let row = i / cols;
+                    let cx = grid_x + col as f32 * cell_w + cell_w * 0.5;
+                    let cy = grid_y + row as f32 * cell_h;
+
+                    let icon_rect = Rect::from_center_size(
+                        Pos2::new(cx, cy + icon_size * 0.5),
+                        Vec2::splat(icon_size),
+                    );
+
+                    let resp = ui.interact(icon_rect.expand(6.0), Id::new(("lp_app", i, page)), Sense::click());
+
+                    // Icon background (colored rounded rect)
+                    let is_builtin = app.path.to_string_lossy().starts_with("aurora://");
+                    let bg = if is_builtin {
+                        category_color(&app.category)
+                    } else {
+                        category_color(&app.category)
+                    };
+
+                    let hover_scale = if resp.hovered() { 1.08 } else { 1.0 };
+                    let scaled_rect = Rect::from_center_size(
+                        icon_rect.center(),
+                        icon_rect.size() * hover_scale,
+                    );
+
+                    // Shadow
+                    painter.rect_filled(
+                        scaled_rect.translate(Vec2::new(0.0, 3.0)),
+                        CornerRadius::same(14),
+                        Color32::from_rgba_unmultiplied(0, 0, 0, 40),
+                    );
+                    // Background
+                    painter.rect_filled(scaled_rect, CornerRadius::same(14), bg);
+
+                    // Icon symbol — first letter(s) or category icon
+                    let symbol = app_icon_symbol(&app.name);
+                    painter.text(
+                        scaled_rect.center(),
+                        Align2::CENTER_CENTER,
+                        symbol,
+                        FontId::proportional(icon_size * 0.35 * hover_scale),
+                        Color32::WHITE,
+                    );
+
+                    // App name below icon
+                    let name_pos = Pos2::new(cx, cy + icon_size + 10.0);
+                    let truncated = if app.name.len() > 12 {
+                        format!("{}...", &app.name[..10])
+                    } else {
+                        app.name.clone()
+                    };
+                    painter.text(
+                        name_pos,
+                        Align2::CENTER_TOP,
+                        &truncated,
+                        FontId::proportional(11.0),
+                        Color32::WHITE,
+                    );
+
+                    if resp.clicked() {
+                        if is_builtin {
+                            open_app = Some(app.name.clone());
+                        } else {
+                            launch_external = Some(app.path.clone());
+                        }
+                    }
+
+                    if resp.hovered() && !is_builtin {
+                        resp.on_hover_text(format!("{}\n{}", app.name, app.path.display()));
+                    }
+                }
+
+                // Page dots
+                if total_pages > 1 {
+                    let dots_y = grid_y + grid_h + 20.0;
+                    let dots_w = total_pages as f32 * 18.0;
+                    let dots_x = (screen.width() - dots_w) * 0.5;
+                    for p in 0..total_pages {
+                        let dot_center = Pos2::new(dots_x + p as f32 * 18.0 + 9.0, dots_y);
+                        let dot_rect = Rect::from_center_size(dot_center, Vec2::splat(12.0));
+                        let dot_resp = ui.interact(dot_rect, Id::new(("lp_page", p)), Sense::click());
+                        let alpha = if p == page { 255 } else { 100 };
+                        painter.circle_filled(dot_center, if p == page { 4.0 } else { 3.0 }, Color32::from_white_alpha(alpha));
+                        if dot_resp.clicked() {
+                            self.launchpad_page = p;
+                        }
+                    }
+
+                    // Arrow key navigation
+                    if ui.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && page > 0 {
+                        self.launchpad_page = page - 1;
+                    }
+                    if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) && page + 1 < total_pages {
+                        self.launchpad_page = page + 1;
+                    }
+                }
+
+                // Click on empty space dismisses launchpad
+                let bg_resp = ui.interact(screen, Id::new("launchpad_dismiss"), Sense::click());
+                if bg_resp.clicked() && open_app.is_none() && launch_external.is_none() {
+                    self.show_launchpad = false;
+                }
+            });
+
+        // Handle app launch
+        if let Some(name) = open_app {
+            self.open_builtin_app(&name);
+            self.show_launchpad = false;
+        }
+        if let Some(path) = launch_external {
+            self.launch_external_app(&path);
+            self.show_launchpad = false;
+        }
+    }
+
+    fn open_builtin_app(&mut self, name: &str) {
+        let kind = match name {
+            "System Overview" => Some(WindowKind::Overview),
+            "Terminal" => Some(WindowKind::Terminal),
+            "Files" => Some(WindowKind::FileManager),
+            "Browser" => Some(WindowKind::Browser),
+            "Calculator" => Some(WindowKind::Calculator),
+            "Notes" => Some(WindowKind::Notes),
+            "Music" => Some(WindowKind::MusicPlayer),
+            "Photos" => Some(WindowKind::Photos),
+            "Calendar" => Some(WindowKind::Calendar),
+            "TextEdit" => Some(WindowKind::TextEditor),
+            "Settings" => Some(WindowKind::Settings),
+            "Activity Monitor" => Some(WindowKind::ProcessManager),
+            "Messages" => Some(WindowKind::Messages),
+            "Quick Controls" => Some(WindowKind::Controls),
+            _ => None,
+        };
+        if let Some(wk) = kind {
+            let win = self.window_mut(wk);
+            win.restore();
+            win.id_epoch = win.id_epoch.saturating_add(1);
+            self.bring_to_front(wk);
+        }
+    }
+
+    fn launch_external_app(&mut self, path: &std::path::Path) {
+        let name = path.file_stem().and_then(|n| n.to_str()).unwrap_or("App").to_string();
+        let path_str = path.to_string_lossy().to_string();
+
+        // For .lnk shortcuts, we need to resolve the target or use cmd /C start
+        // For .exe files, we can launch directly
+        let (program, args): (String, Vec<String>) = if path_str.ends_with(".lnk") {
+            // Windows .lnk shortcuts: use cmd /C start to resolve the shortcut
+            ("cmd".to_string(), vec!["/C".to_string(), "start".to_string(), String::new(), path_str.clone()])
+        } else {
+            (path_str.clone(), Vec::new())
+        };
+
+        let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        match EmbeddedApp::launch(&name, &program, &args_refs) {
+            Ok(app) => {
+                self.notification_center.notify(
+                    "Launchpad",
+                    &format!("Embedding {}", name),
+                    "Finding window...",
+                    Color32::from_rgb(52, 199, 89),
+                );
+                self.embedded_apps.push(app);
+            }
+            Err(e) => {
+                // Fallback: open normally in Windows if embedding fails
+                open_file_with_system(path);
+                self.toasts.push(Toast::new(
+                    "Launched externally",
+                    format!("{} (embed failed: {})", name, e),
+                    Color32::from_rgb(255, 214, 10),
+                ));
+            }
+        }
+    }
+
+
+    // ── Embedded Windows Apps ───────────────────────────────────────────────
+
+    fn update_embedded_apps(&mut self, ctx: &egui::Context) {
+        // Remove dead apps
+        self.embedded_apps.retain_mut(|app| app.is_alive());
+
+        #[cfg(windows)]
+        {
+            let parent = self.own_hwnd;
+            for app in &mut self.embedded_apps {
+                // Try to find HWND if not yet found
+                if app.hwnd.is_none() {
+                    app.try_find_hwnd();
+                }
+                // Reparent once found
+                if app.hwnd.is_some() && !app.is_reparented() {
+                    if let Some(p) = parent {
+                        app.reparent(p);
+                    }
+                }
+            }
+        }
+
+        // Request repaint while apps are being searched
+        if self.embedded_apps.iter().any(|a| a.hwnd.is_none() && !a.gave_up()) {
+            ctx.request_repaint();
+        }
+    }
+
+    fn render_embed_launcher(&mut self, ctx: &egui::Context) {
+        let screen = ctx.content_rect();
+        let panel_w = 420.0_f32;
+        let panel_h = 380.0_f32;
+        let panel_pos = Pos2::new(
+            (screen.width() - panel_w) * 0.5,
+            (screen.height() - panel_h) * 0.4,
+        );
+
+        // Dimmed backdrop
+        let painter = ctx.layer_painter(egui::LayerId::new(Order::Foreground, Id::new("embed_dim")));
+        painter.rect_filled(screen, 0.0, Color32::from_rgba_unmultiplied(0, 0, 0, 120));
+
+        egui::Area::new(Id::new("embed_launcher"))
+            .fixed_pos(panel_pos)
+            .order(Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(40, 40, 48, 240))
+                    .corner_radius(CornerRadius::same(12))
+                    .inner_margin(egui::Margin::same(20))
+                    .stroke(Stroke::new(1.0, Color32::from_rgb(80, 80, 100)))
+                    .show(ui, |ui| {
+                        ui.set_width(panel_w - 40.0);
+
+                        ui.label(RichText::new("Launch Embedded App").size(18.0).color(Color32::WHITE).strong());
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("Enter a program path or name (e.g. notepad, calc, mspaint)")
+                            .size(12.0).color(Color32::from_rgb(160, 160, 180)));
+                        ui.add_space(12.0);
+
+                        let resp = ui.add(
+                            egui::TextEdit::singleline(&mut self.embed_launch_input)
+                                .desired_width(panel_w - 60.0)
+                                .hint_text("Program name or path...")
+                                .font(FontId::monospace(14.0))
+                        );
+
+                        if !resp.has_focus() && self.embed_launch_input.is_empty() {
+                            resp.request_focus();
+                        }
+
+                        ui.add_space(12.0);
+
+                        ui.horizontal(|ui| {
+                            let launch = ui.button(RichText::new("Launch").size(14.0));
+                            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+                            if (launch.clicked() || enter) && !self.embed_launch_input.trim().is_empty() {
+                                let program = self.embed_launch_input.trim().to_string();
+                                let label = program.split(['/', '\\']).last().unwrap_or(&program).to_string();
+                                match EmbeddedApp::launch(&label, &program, &[]) {
+                                    Ok(app) => {
+                                        self.notification_center.notify(
+                                            "Embedded Apps", &format!("Launching {}", label),
+                                            "Finding window...", Color32::from_rgb(52, 199, 89),
+                                        );
+                                        self.embedded_apps.push(app);
+                                        self.embed_launch_input.clear();
+                                        self.show_embed_launcher = false;
+                                    }
+                                    Err(e) => {
+                                        self.notification_center.notify(
+                                            "Embedded Apps", "Launch Failed", &e,
+                                            Color32::from_rgb(255, 59, 48),
+                                        );
+                                    }
+                                }
+                            }
+
+                            if ui.button(RichText::new("Cancel").size(14.0)).clicked() {
+                                self.show_embed_launcher = false;
+                                self.embed_launch_input.clear();
+                            }
+                        });
+
+                        ui.add_space(16.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+
+                        // Quick launch presets
+                        ui.label(RichText::new("Quick Launch").size(13.0).color(Color32::from_rgb(180, 180, 200)));
+                        ui.add_space(6.0);
+
+                        let presets = [
+                            ("Notepad", "notepad"),
+                            ("Calculator", "calc"),
+                            ("Paint", "mspaint"),
+                            ("WordPad", "wordpad"),
+                            ("Snipping Tool", "snippingtool"),
+                        ];
+
+                        let mut launch_preset: Option<(&str, &str)> = None;
+                        for (label, cmd) in presets {
+                            if ui.add(egui::Button::new(
+                                RichText::new(format!("  {}  ", label)).size(12.0)
+                            ).corner_radius(CornerRadius::same(6))).clicked() {
+                                launch_preset = Some((label, cmd));
+                            }
+                        }
+
+                        if let Some((label, cmd)) = launch_preset {
+                            match EmbeddedApp::launch(label, cmd, &[]) {
+                                Ok(app) => {
+                                    self.notification_center.notify(
+                                        "Embedded Apps", &format!("Launching {}", label),
+                                        "Finding window...", Color32::from_rgb(52, 199, 89),
+                                    );
+                                    self.embedded_apps.push(app);
+                                    self.show_embed_launcher = false;
+                                }
+                                Err(e) => {
+                                    self.notification_center.notify(
+                                        "Embedded Apps", "Launch Failed", &e,
+                                        Color32::from_rgb(255, 59, 48),
+                                    );
+                                }
+                            }
+                        }
+
+                        // Show running embedded apps
+                        if !self.embedded_apps.is_empty() {
+                            ui.add_space(12.0);
+                            ui.separator();
+                            ui.add_space(8.0);
+                            ui.label(RichText::new("Running Embedded Apps").size(13.0).color(Color32::from_rgb(180, 180, 200)));
+                            ui.add_space(4.0);
+
+                            let mut detach_idx: Option<usize> = None;
+                            for (i, app) in self.embedded_apps.iter().enumerate() {
+                                ui.horizontal(|ui| {
+                                    let status = if app.is_reparented() {
+                                        RichText::new("●").size(10.0).color(Color32::from_rgb(52, 199, 89))
+                                    } else if app.gave_up() {
+                                        RichText::new("●").size(10.0).color(Color32::from_rgb(255, 59, 48))
+                                    } else {
+                                        RichText::new("●").size(10.0).color(Color32::from_rgb(255, 214, 10))
+                                    };
+                                    ui.label(status);
+                                    ui.label(RichText::new(&app.label).size(12.0).color(Color32::WHITE));
+                                    if ui.small_button("Detach").clicked() {
+                                        detach_idx = Some(i);
+                                    }
+                                });
+                            }
+
+                            if let Some(idx) = detach_idx {
+                                if idx < self.embedded_apps.len() {
+                                    self.embedded_apps[idx].detach();
+                                    self.embedded_apps.remove(idx);
+                                }
+                            }
+                        }
+                    });
+            });
+    }
+
+    /// Render embedded app areas (each app gets a floating egui window)
+    fn render_embedded_app_windows(&mut self, _ctx: &egui::Context, work_rect: Rect) {
+        let app_count = self.embedded_apps.len();
+        if app_count == 0 { return; }
+
+        for (i, app) in self.embedded_apps.iter_mut().enumerate() {
+            if !app.is_reparented() { continue; }
+
+            // Position each embedded app in a tiled layout within the work area
+            let cols = (app_count as f32).sqrt().ceil() as usize;
+            let rows = (app_count + cols - 1) / cols;
+            let col = i % cols;
+            let row = i / cols;
+            let tile_w = work_rect.width() / cols as f32;
+            let tile_h = work_rect.height() / rows as f32;
+            let x = work_rect.left() + col as f32 * tile_w;
+            let y = work_rect.top() + row as f32 * tile_h;
+
+            // Leave some margin
+            let margin = 4.0;
+            app.position(
+                (x + margin) as i32,
+                (y + margin) as i32,
+                (tile_w - margin * 2.0) as i32,
+                (tile_h - margin * 2.0) as i32,
+            );
+        }
+    }
 }
 
 // ── eframe::App ──────────────────────────────────────────────────────────────
@@ -4130,6 +4698,12 @@ impl eframe::App for AuroraDesktopApp {
             pty.poll_output();
         }
 
+        // Cache our own HWND for embedded app reparenting
+        #[cfg(windows)]
+        if self.own_hwnd.is_none() {
+            self.own_hwnd = embedded_app::find_own_hwnd();
+        }
+
         self.render_background(ctx);
 
         // Login screen blocks everything else
@@ -4149,7 +4723,8 @@ impl eframe::App for AuroraDesktopApp {
             self.spotlight_query.clear();
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if self.show_mission_control { self.show_mission_control = false; }
+            if self.show_launchpad { self.show_launchpad = false; }
+            else if self.show_mission_control { self.show_mission_control = false; }
             else {
                 self.show_spotlight = false;
                 self.show_control_center = false;
@@ -4160,6 +4735,12 @@ impl eframe::App for AuroraDesktopApp {
                 self.active_menu = None;
                 self.context_menu_pos = None;
             }
+        }
+        // F4 = Launchpad
+        if ctx.input(|i| i.key_pressed(egui::Key::F4)) {
+            self.show_launchpad = !self.show_launchpad;
+            self.launchpad_query.clear();
+            self.launchpad_page = 0;
         }
         // F3 or Ctrl+Up = Mission Control
         if ctx.input(|i| i.key_pressed(egui::Key::F3) || (i.key_pressed(egui::Key::ArrowUp) && i.modifiers.ctrl && i.modifiers.shift)) {
@@ -4184,6 +4765,11 @@ impl eframe::App for AuroraDesktopApp {
         if self.active_menu.is_some() { self.render_menu_dropdown(ctx); }
         if self.context_menu_pos.is_some() { self.render_context_menu(ctx); }
 
+        // Launchpad overlay (full-screen app grid)
+        if self.show_launchpad {
+            self.render_launchpad(ctx);
+        }
+
         // Mission Control overlay (renders on top of everything)
         if self.show_mission_control || self.mission_control_anim > 0.01 {
             self.render_mission_control(ctx);
@@ -4199,6 +4785,18 @@ impl eframe::App for AuroraDesktopApp {
         // Toast notifications
         if !self.toasts.is_empty() {
             self.render_toasts(ctx);
+        }
+
+        // Embedded Windows apps
+        self.update_embedded_apps(ctx);
+        self.render_embedded_app_windows(ctx, work_rect);
+        if self.show_embed_launcher {
+            self.render_embed_launcher(ctx);
+        }
+
+        // Ctrl+Shift+E = Embed launcher
+        if ctx.input(|i| i.key_pressed(egui::Key::E) && i.modifiers.ctrl && i.modifiers.shift) {
+            self.show_embed_launcher = !self.show_embed_launcher;
         }
 
         // Auto-save
@@ -4334,6 +4932,10 @@ impl eframe::App for AuroraDesktopApp {
                         }
                     }
                 }
+                MenuAction::ToggleFullScreen => {
+                    let is_fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!is_fullscreen));
+                }
             }
         }
 
@@ -4438,7 +5040,8 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_title("AuroraOS Desktop")
             .with_inner_size([1440.0, 900.0])
-            .with_min_inner_size([1080.0, 700.0]),
+            .with_min_inner_size([1080.0, 700.0])
+            .with_fullscreen(true),
         ..Default::default()
     };
 
