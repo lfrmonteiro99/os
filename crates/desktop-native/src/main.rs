@@ -499,6 +499,13 @@ struct AuroraDesktopApp {
     toast_manager: ToastManager,
     // Snap preview animation
     snap_preview_anim_start: Option<std::time::Instant>,
+    // Calendar navigation
+    calendar_month_offset: i32,
+    // Photo viewer lightbox
+    photo_viewer_idx: Option<usize>,
+    // App Switcher (Ctrl+Tab)
+    show_app_switcher: bool,
+    app_switcher_idx: usize,
     // Spotlight: deferred file open
     spotlight_open_file: Option<PathBuf>,
     // Wallpaper
@@ -630,6 +637,10 @@ impl AuroraDesktopApp {
             messages_state: MessagesState::new(),
             toast_manager: ToastManager::new(4),
             snap_preview_anim_start: None,
+            calendar_month_offset: 0,
+            photo_viewer_idx: None,
+            show_app_switcher: false,
+            app_switcher_idx: 0,
             spotlight_open_file: None,
             wallpaper_idx: 0,
             show_login: true,
@@ -2369,7 +2380,7 @@ impl AuroraDesktopApp {
         });
     }
 
-    fn content_photos(ui: &mut egui::Ui) {
+    fn content_photos(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             for tab in ["All Photos", "Favorites", "Albums", "People"] {
                 let active = tab == "All Photos";
@@ -2413,28 +2424,115 @@ impl AuroraDesktopApp {
                     if resp.hovered() {
                         ui.painter().rect_stroke(rect, CornerRadius::same(4), Stroke::new(2.0, Color32::from_rgb(0, 122, 255)), StrokeKind::Outside);
                     }
+                    if resp.clicked() {
+                        self.photo_viewer_idx = Some(i);
+                    }
                     if (i + 1) % cols == 0 { ui.end_row(); }
                 }
             });
         });
+
+        // Photo lightbox viewer
+        if let Some(idx) = self.photo_viewer_idx {
+            let color = colors[idx % colors.len()];
+            let lighter = Color32::from_rgba_unmultiplied(
+                (color.r() as u16 + 40).min(255) as u8,
+                (color.g() as u16 + 40).min(255) as u8,
+                (color.b() as u16 + 40).min(255) as u8, 255);
+
+            // Dim overlay
+            let full = ui.max_rect();
+            ui.painter().rect_filled(full, 0.0, Color32::from_rgba_unmultiplied(0, 0, 0, 180));
+
+            // Large photo
+            let photo_size = Vec2::new(full.width() * 0.7, full.height() * 0.7);
+            let photo_rect = Rect::from_center_size(full.center(), photo_size);
+            gradient_rect(ui.painter(), photo_rect, lighter, color);
+            ui.painter().rect_stroke(photo_rect, CornerRadius::same(8), Stroke::new(1.0, Color32::from_white_alpha(40)), StrokeKind::Outside);
+
+            // Photo number
+            ui.painter().text(
+                Pos2::new(photo_rect.center().x, photo_rect.bottom() + 16.0),
+                Align2::CENTER_TOP,
+                format!("Photo {} of {}", idx + 1, colors.len()),
+                FontId::proportional(12.0),
+                Color32::from_gray(180),
+            );
+
+            // Navigation arrows
+            let left_rect = Rect::from_center_size(
+                Pos2::new(photo_rect.left() - 24.0, photo_rect.center().y), Vec2::splat(32.0));
+            let right_rect = Rect::from_center_size(
+                Pos2::new(photo_rect.right() + 24.0, photo_rect.center().y), Vec2::splat(32.0));
+
+            let left_resp = ui.interact(left_rect, Id::new("photo_prev"), Sense::click());
+            ui.painter().text(left_rect.center(), Align2::CENTER_CENTER, "<", FontId::proportional(24.0),
+                if left_resp.hovered() { Color32::WHITE } else { Color32::from_gray(160) });
+            if left_resp.clicked() && idx > 0 {
+                self.photo_viewer_idx = Some(idx - 1);
+            }
+
+            let right_resp = ui.interact(right_rect, Id::new("photo_next"), Sense::click());
+            ui.painter().text(right_rect.center(), Align2::CENTER_CENTER, ">", FontId::proportional(24.0),
+                if right_resp.hovered() { Color32::WHITE } else { Color32::from_gray(160) });
+            if right_resp.clicked() && idx + 1 < colors.len() {
+                self.photo_viewer_idx = Some(idx + 1);
+            }
+
+            // Close button (X) or click background
+            let close_rect = Rect::from_center_size(
+                Pos2::new(photo_rect.right() - 12.0, photo_rect.top() - 12.0), Vec2::splat(24.0));
+            let close_resp = ui.interact(close_rect, Id::new("photo_close"), Sense::click());
+            ui.painter().text(close_rect.center(), Align2::CENTER_CENTER, "X", FontId::proportional(14.0),
+                if close_resp.hovered() { Color32::WHITE } else { Color32::from_gray(180) });
+            if close_resp.clicked() {
+                self.photo_viewer_idx = None;
+            }
+
+            // Escape to close
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.photo_viewer_idx = None;
+            }
+            // Arrow keys to navigate
+            if ui.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && idx > 0 {
+                self.photo_viewer_idx = Some(idx - 1);
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) && idx + 1 < colors.len() {
+                self.photo_viewer_idx = Some(idx + 1);
+            }
+        }
     }
 
-    fn content_calendar(ui: &mut egui::Ui) {
+    fn content_calendar(&mut self, ui: &mut egui::Ui) {
         let now = Local::now();
-        let year = now.year();
-        let month = now.month();
-        let today = now.day();
+        // Apply month offset for navigation
+        let base_date = now.date_naive();
+        let target = if self.calendar_month_offset >= 0 {
+            base_date.checked_add_months(chrono::Months::new(self.calendar_month_offset as u32)).unwrap_or(base_date)
+        } else {
+            base_date.checked_sub_months(chrono::Months::new((-self.calendar_month_offset) as u32)).unwrap_or(base_date)
+        };
+        let year = target.year();
+        let month = target.month();
+        let today_day = if self.calendar_month_offset == 0 { now.day() } else { 0 }; // only highlight today in current month
 
         let month_names = ["January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"];
         let month_name = month_names[(month - 1) as usize];
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new("<").size(16.0).color(Color32::from_gray(140)));
+            if ui.add(egui::Label::new(RichText::new("<").size(16.0).color(Color32::from_gray(200))).sense(Sense::click())).clicked() {
+                self.calendar_month_offset -= 1;
+            }
             ui.add_space(8.0);
-            ui.label(RichText::new(format!("{month_name} {year}")).size(16.0).strong().color(Color32::WHITE));
+            let title_resp = ui.add(egui::Label::new(RichText::new(format!("{month_name} {year}")).size(16.0).strong().color(Color32::WHITE)).sense(Sense::click()));
+            if title_resp.clicked() {
+                self.calendar_month_offset = 0; // click title to go back to today
+            }
             ui.add_space(8.0);
-            ui.label(RichText::new(">").size(16.0).color(Color32::from_gray(140)));
+            if ui.add(egui::Label::new(RichText::new(">").size(16.0).color(Color32::from_gray(200))).sense(Sense::click())).clicked() {
+                self.calendar_month_offset += 1;
+            }
         });
         ui.add_space(10.0);
 
@@ -2466,7 +2564,7 @@ impl AuroraDesktopApp {
                     if (_week == 0 && (col as usize) < first_weekday) || day > days_in_month {
                         // Empty cell
                     } else {
-                        let is_today = day == today;
+                        let is_today = day == today_day;
                         if is_today {
                             ui.painter().circle_filled(r.center(), 14.0, Color32::from_rgb(255, 59, 48));
                         }
@@ -3151,8 +3249,8 @@ impl AuroraDesktopApp {
                         WindowKind::Notes => Self::content_notes(ui, &mut self.notes_text),
                         WindowKind::MusicPlayer => Self::content_music(ui,
                             &mut self.music_playing, &mut self.music_track_idx),
-                        WindowKind::Photos => Self::content_photos(ui),
-                        WindowKind::Calendar => Self::content_calendar(ui),
+                        WindowKind::Photos => self.content_photos(ui),
+                        WindowKind::Calendar => self.content_calendar(ui),
                         WindowKind::TextEditor => Self::content_text_editor(ui,
                             &self.editor_file_path, &mut self.editor_content, &mut self.editor_modified),
                         WindowKind::Settings => self.content_settings(ui),
@@ -3859,6 +3957,41 @@ impl AuroraDesktopApp {
                                 }
                             }
 
+                            // Installed apps from AppCatalog (external apps discovered on system)
+                            let installed: Vec<(String, String, std::path::PathBuf)> = self.app_catalog
+                                .search(&self.spotlight_query)
+                                .iter()
+                                .filter(|a| !a.path.to_string_lossy().starts_with("aurora://")) // skip builtins (already shown above)
+                                .take(6)
+                                .map(|a| (a.name.clone(), a.category.clone(), a.path.clone()))
+                                .collect();
+                            if !installed.is_empty() {
+                                ui.add_space(4.0);
+                                ui.label(RichText::new("Installed Apps").size(11.0).strong().color(Color32::from_gray(120)));
+                                ui.add_space(2.0);
+                                for (name, category, path) in &installed {
+                                    let resp = egui::Frame::default()
+                                        .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 8))
+                                        .corner_radius(CornerRadius::same(6))
+                                        .inner_margin(egui::Margin::symmetric(8, 4))
+                                        .show(ui, |ui| {
+                                            ui.horizontal(|ui| {
+                                                ui.set_min_width(510.0);
+                                                ui.label(RichText::new(name).size(13.0).color(Color32::WHITE));
+                                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                                    ui.label(RichText::new(category).size(11.0).color(Color32::from_gray(100)));
+                                                });
+                                            });
+                                        }).response;
+                                    if resp.interact(Sense::click()).clicked() {
+                                        let _ = open_file_with_system(path);
+                                        self.show_spotlight = false;
+                                        self.spotlight_query.clear();
+                                    }
+                                    ui.add_space(1.0);
+                                }
+                            }
+
                             // File results (real)
                             if !file_results.is_empty() {
                                 ui.add_space(4.0);
@@ -4184,6 +4317,114 @@ impl AuroraDesktopApp {
                 self.show_mission_control = false;
             }
         }
+    }
+
+    // ── App Switcher (Ctrl+Tab) ─────────────────────────────────────────────
+
+    fn handle_app_switcher(&mut self, ctx: &egui::Context) {
+        let tab_pressed = ctx.input(|i| i.key_pressed(egui::Key::Tab) && i.modifiers.ctrl);
+        let ctrl_held = ctx.input(|i| i.modifiers.ctrl);
+
+        if tab_pressed {
+            let open_windows: Vec<WindowKind> = self.z_order.iter().copied()
+                .filter(|k| { let w = self.window_ref(*k); w.open && !w.minimized && w.desktop == self.current_desktop })
+                .collect();
+            if open_windows.is_empty() { return; }
+
+            if !self.show_app_switcher {
+                self.show_app_switcher = true;
+                self.app_switcher_idx = 0;
+            }
+            // Shift+Tab = go backwards
+            let shift = ctx.input(|i| i.modifiers.shift);
+            let count = open_windows.len();
+            if shift {
+                self.app_switcher_idx = if self.app_switcher_idx == 0 { count - 1 } else { self.app_switcher_idx - 1 };
+            } else {
+                self.app_switcher_idx = (self.app_switcher_idx + 1) % count;
+            }
+        }
+
+        if self.show_app_switcher && !ctrl_held {
+            // Ctrl released — select the window
+            let open_windows: Vec<WindowKind> = self.z_order.iter().copied()
+                .filter(|k| { let w = self.window_ref(*k); w.open && !w.minimized && w.desktop == self.current_desktop })
+                .collect();
+            if let Some(&kind) = open_windows.get(self.app_switcher_idx) {
+                self.bring_to_front(kind);
+            }
+            self.show_app_switcher = false;
+            return;
+        }
+
+        if !self.show_app_switcher { return; }
+
+        let open_windows: Vec<WindowKind> = self.z_order.iter().copied()
+            .filter(|k| { let w = self.window_ref(*k); w.open && !w.minimized && w.desktop == self.current_desktop })
+            .collect();
+        if open_windows.is_empty() {
+            self.show_app_switcher = false;
+            return;
+        }
+
+        let screen = ctx.viewport_rect();
+        let count = open_windows.len();
+        let icon_size = 72.0;
+        let padding = 12.0;
+        let total_w = count as f32 * (icon_size + padding) - padding + 32.0;
+        let bar_h = icon_size + 40.0;
+
+        egui::Area::new(Id::new("app_switcher"))
+            .fixed_pos(Pos2::new((screen.width() - total_w) / 2.0, screen.center().y - bar_h / 2.0))
+            .order(Order::Foreground)
+            .interactable(false)
+            .show(ctx, |ui| {
+                egui::Frame::default()
+                    .fill(Color32::from_rgba_unmultiplied(40, 40, 50, 220))
+                    .stroke(Stroke::new(0.5, Color32::from_white_alpha(40)))
+                    .corner_radius(CornerRadius::same(16))
+                    .inner_margin(egui::Margin::symmetric(16, 12))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            for (i, kind) in open_windows.iter().enumerate() {
+                                let selected = i == self.app_switcher_idx % count;
+                                let bg = if selected {
+                                    Color32::from_rgba_unmultiplied(0, 122, 255, 80)
+                                } else {
+                                    Color32::TRANSPARENT
+                                };
+                                ui.vertical(|ui| {
+                                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(icon_size), Sense::hover());
+                                    if selected {
+                                        ui.painter().rect_filled(rect.expand(4.0), CornerRadius::same(12),
+                                            Color32::from_rgba_unmultiplied(0, 122, 255, 40));
+                                        ui.painter().rect_stroke(rect.expand(4.0), CornerRadius::same(12),
+                                            Stroke::new(2.0, Color32::from_rgba_unmultiplied(0, 122, 255, 160)), StrokeKind::Outside);
+                                    }
+                                    // App icon background
+                                    let icon_color = match kind {
+                                        WindowKind::Terminal => Color32::from_rgb(30, 30, 46),
+                                        WindowKind::Browser => Color32::from_rgb(0, 180, 216),
+                                        WindowKind::Messages => Color32::from_rgb(76, 217, 100),
+                                        WindowKind::FileManager => Color32::from_rgb(0, 122, 255),
+                                        WindowKind::Calculator => Color32::from_rgb(80, 80, 80),
+                                        WindowKind::Notes => Color32::from_rgb(255, 214, 10),
+                                        WindowKind::MusicPlayer => Color32::from_rgb(255, 55, 95),
+                                        WindowKind::Photos => Color32::from_rgb(255, 107, 107),
+                                        WindowKind::Calendar => Color32::from_rgb(255, 59, 48),
+                                        WindowKind::Settings => Color32::from_rgb(142, 142, 147),
+                                        _ => Color32::from_rgb(88, 86, 214),
+                                    };
+                                    ui.painter().rect_filled(rect.shrink(4.0), CornerRadius::same(14), icon_color);
+                                    icons::paint_app_icon(&ui.painter(), rect.shrink(8.0), kind.title(), "System");
+                                    // Title below
+                                    let title_color = if selected { Color32::WHITE } else { Color32::from_gray(160) };
+                                    ui.label(RichText::new(kind.title()).size(10.0).color(title_color));
+                                });
+                            }
+                        });
+                    });
+            });
     }
 
     // ── Edge-snap preview ────────────────────────────────────────────────────
@@ -4917,6 +5158,9 @@ impl eframe::App for AuroraDesktopApp {
         if self.show_mission_control || self.mission_control_anim > 0.01 {
             self.render_mission_control(ctx);
         }
+
+        // App Switcher (Ctrl+Tab)
+        self.handle_app_switcher(ctx);
 
         if !self.show_control_center && !self.show_notifications {
             self.render_fps_overlay(ctx);
