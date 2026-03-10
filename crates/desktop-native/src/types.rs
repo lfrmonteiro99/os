@@ -10,7 +10,7 @@ pub const DOCK_HEIGHT: f32 = 96.0;
 pub const DOCK_ICON_BASE: f32 = 48.0;
 pub const DOCK_ICON_MAX_SCALE: f32 = 1.35;
 pub const DOCK_EFFECT_DIST: f32 = 120.0;
-pub const WINDOW_COUNT: usize = 16;
+pub const WINDOW_COUNT: usize = 18;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AppScreenState {
@@ -71,6 +71,8 @@ pub enum WindowKind {
     ProcessManager = 13,
     Trash = 14,
     NetworkDiagnostics = 15,
+    Dictionary = 16,
+    Console = 17,
 }
 
 impl WindowKind {
@@ -92,6 +94,8 @@ impl WindowKind {
             13 => Some(Self::ProcessManager),
             14 => Some(Self::Trash),
             15 => Some(Self::NetworkDiagnostics),
+            16 => Some(Self::Dictionary),
+            17 => Some(Self::Console),
             _ => None,
         }
     }
@@ -114,6 +118,8 @@ impl WindowKind {
             Self::ProcessManager => "Activity Monitor",
             Self::Trash => "Trash",
             Self::NetworkDiagnostics => "Network Diagnostics",
+            Self::Dictionary => "Dictionary",
+            Self::Console => "Console",
         }
     }
 }
@@ -390,6 +396,8 @@ mod tests {
             WindowKind::ProcessManager,
             WindowKind::Trash,
             WindowKind::NetworkDiagnostics,
+            WindowKind::Dictionary,
+            WindowKind::Console,
         ];
         for kind in kinds {
             assert!(!kind.title().is_empty(), "{kind:?} has empty title");
@@ -398,8 +406,8 @@ mod tests {
 
     #[test]
     fn window_count_matches_enum() {
-        assert_eq!(WINDOW_COUNT, 16);
-        assert_eq!(WindowKind::NetworkDiagnostics as usize, WINDOW_COUNT - 1);
+        assert_eq!(WINDOW_COUNT, 18);
+        assert_eq!(WindowKind::Console as usize, WINDOW_COUNT - 1);
     }
 
     #[test]
@@ -411,6 +419,8 @@ mod tests {
         assert_eq!(WindowKind::ProcessManager as usize, 13);
         assert_eq!(WindowKind::Trash as usize, 14);
         assert_eq!(WindowKind::NetworkDiagnostics as usize, 15);
+        assert_eq!(WindowKind::Dictionary as usize, 16);
+        assert_eq!(WindowKind::Console as usize, 17);
     }
 
     #[test]
@@ -424,7 +434,7 @@ mod tests {
 
     #[test]
     fn from_index_out_of_bounds() {
-        assert!(WindowKind::from_index(16).is_none());
+        assert!(WindowKind::from_index(18).is_none());
         assert!(WindowKind::from_index(999).is_none());
     }
 

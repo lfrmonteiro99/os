@@ -203,6 +203,17 @@ fn parse_json_bool(json: &str, key: &str) -> Option<bool> {
 mod tests {
     use super::*;
 
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "{label}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
     #[test]
     fn derive_initials_handles_empty() {
         assert_eq!(derive_initials(""), "");
@@ -247,7 +258,7 @@ mod tests {
 
     #[test]
     fn save_and_load_from_path_roundtrip() {
-        let dir = std::env::temp_dir().join("aurora_profile_tests");
+        let dir = unique_temp_dir("aurora_profile_tests");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(".aurora_profile_test.json");
         let profile = UserProfile::from_display_name("Aurora User", (44, 55, 66));

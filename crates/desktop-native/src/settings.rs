@@ -372,6 +372,17 @@ fn parse_json_bool(json: &str, key: &str) -> Option<bool> {
 mod tests {
     use super::*;
 
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "{label}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
     #[test]
     fn default_settings_are_sane() {
         let s = AppSettings::default();
@@ -542,7 +553,7 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         // Use a temp dir to avoid polluting user home
-        let dir = std::env::temp_dir().join("aurora_test_settings");
+        let dir = unique_temp_dir("aurora_test_settings");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(".aurora_settings_test.json");
 
@@ -564,7 +575,7 @@ mod tests {
         assert_eq!(loaded.wallpaper_idx, 2);
 
         let _ = std::fs::remove_file(&path);
-        let _ = std::fs::remove_dir(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -4,6 +4,8 @@ mod auto_save;
 mod browser;
 mod calculator;
 mod clipboard;
+mod console;
+mod dictionary;
 mod embedded_app;
 mod emoji_picker;
 mod file_index;
@@ -33,8 +35,8 @@ use std::time::{Duration, Instant};
 use battery::Manager as BatteryManager;
 use chrono::{Datelike, Local, Timelike};
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, FontId, Id, Layout, Order, Pos2, Rect, RichText,
-    Sense, Shape, Stroke, StrokeKind, Vec2,
+    self, Align, Align2, Color32, ColorImage, CornerRadius, FontId, Id, Layout, Order, Pos2, Rect,
+    RichText, Sense, Shape, Stroke, StrokeKind, TextureHandle, TextureOptions, Vec2,
 };
 use ipc::{decode_response, encode_command, CommandFrame};
 use sysinfo::{CpuRefreshKind, MemoryRefreshKind, Networks, RefreshKind, System};
@@ -48,6 +50,8 @@ use auto_save::AutoSave;
 use browser::BrowserState;
 use calculator::{calc_eval, format_calc};
 use clipboard::AppClipboard;
+use console::{ConsoleApp, ConsoleTelemetrySnapshot};
+use dictionary::{inline_definition as dictionary_inline_definition, DictionaryApp};
 use embedded_app::EmbeddedApp;
 use emoji_picker::{
     filtered_entries as filtered_emoji_entries, find_by_symbol as find_emoji_by_symbol,
@@ -728,6 +732,7 @@ struct AuroraDesktopApp {
     // Music player state
     music_playing: bool,
     music_track_idx: usize,
+    music_library_query: String,
     // Text editor state
     editor_file_path: Option<PathBuf>,
     editor_content: String,
@@ -817,6 +822,8 @@ struct AuroraDesktopApp {
     // Process manager
     proc_manager: Option<ProcessManager>,
     network_diagnostics: NetworkDiagnostics,
+    dictionary_app: DictionaryApp,
+    console_app: ConsoleApp,
     proc_search: String,
     proc_sort_by_cpu: bool,
     // Auto-save
@@ -845,6 +852,7 @@ struct AuroraDesktopApp {
     assistant_history: Vec<AssistantMessage>,
     assistant_state: AssistantOverlayState,
     pending_assistant_query: Option<(String, Instant)>,
+    photo_texture_cache: HashMap<PathBuf, TextureHandle>,
     show_file_sidebar: bool,
     show_file_preview_pane: bool,
     show_file_path_bar: bool,
@@ -1041,6 +1049,8 @@ impl AuroraDesktopApp {
                 ManagedWindow::new(Pos2::new(250.0, 70.0), Vec2::new(560.0, 420.0)),  // ProcessManager
                 ManagedWindow::new(Pos2::new(500.0, 90.0), Vec2::new(520.0, 420.0)),  // Trash
                 ManagedWindow::new(Pos2::new(420.0, 110.0), Vec2::new(520.0, 360.0)), // NetworkDiagnostics
+                ManagedWindow::new(Pos2::new(260.0, 90.0), Vec2::new(700.0, 520.0)),  // Dictionary
+                ManagedWindow::new(Pos2::new(220.0, 80.0), Vec2::new(860.0, 560.0)),  // Console
             ],
             z_order: vec![
                 WindowKind::Overview, WindowKind::FileManager, WindowKind::Browser,
@@ -1105,6 +1115,7 @@ impl AuroraDesktopApp {
             notes_active_tab: 0,
             music_playing: false,
             music_track_idx: 0,
+            music_library_query: String::new(),
             editor_file_path: None,
             editor_content: String::new(),
             editor_modified: false,
@@ -1179,6 +1190,8 @@ impl AuroraDesktopApp {
             clipboard: AppClipboard::new(),
             proc_manager: None,
             network_diagnostics: NetworkDiagnostics::new(),
+            dictionary_app: DictionaryApp::new(),
+            console_app: ConsoleApp::new(),
             proc_search: String::new(),
             proc_sort_by_cpu: true,
             auto_save: AutoSave::new(30, dirs_home()),
@@ -1202,6 +1215,7 @@ impl AuroraDesktopApp {
             assistant_history: Vec::new(),
             assistant_state: AssistantOverlayState::Idle,
             pending_assistant_query: None,
+            photo_texture_cache: HashMap::new(),
             show_file_sidebar: true,
             show_file_preview_pane: true,
             show_file_path_bar,
@@ -1241,6 +1255,8 @@ impl AuroraDesktopApp {
         app.windows[WindowKind::Settings as usize].open = false;
         app.windows[WindowKind::ProcessManager as usize].open = false;
         app.windows[WindowKind::NetworkDiagnostics as usize].open = false;
+        app.windows[WindowKind::Dictionary as usize].open = false;
+        app.windows[WindowKind::Console as usize].open = false;
         app.load_state();
         // Apply persisted settings
         app.cc_volume = app.app_settings.volume;
@@ -1748,19 +1764,14 @@ impl AuroraDesktopApp {
             .strip_prefix("define ")?
             .trim()
             .to_ascii_lowercase();
-        let definition = match word.as_str() {
-            "aurora" => "A natural light display in the sky, often near polar regions.",
-            "widget" => "A small interface element that shows information or shortcuts.",
-            "kernel" => {
-                "The core component of an operating system that manages hardware and processes."
-            }
-            _ => "No local definition found. Open Dictionary for a full entry.",
-        };
+        let definition = dictionary_inline_definition(&word).unwrap_or_else(|| {
+            "No local definition found. Open Dictionary for a full entry.".to_string()
+        });
         Some(SpotlightInlineResult {
             kind: SpotlightInlineKind::Definition,
             title: format!("define {}", word),
             subtitle: "Definition".to_string(),
-            body: definition.to_string(),
+            body: definition,
         })
     }
 
@@ -2036,6 +2047,73 @@ impl AuroraDesktopApp {
             .collect::<Vec<_>>();
         paths.sort();
         paths
+    }
+
+    fn decode_photo_color_image(path: &std::path::Path) -> Option<ColorImage> {
+        let image = image::open(path).ok()?;
+        let image = if image.width() > 512 || image.height() > 512 {
+            image.thumbnail(512, 512)
+        } else {
+            image
+        }
+        .to_rgba8();
+        let size = [image.width() as usize, image.height() as usize];
+        let pixels = image.as_flat_samples();
+        Some(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()))
+    }
+
+    fn photo_texture_for_path(
+        &mut self,
+        ctx: &egui::Context,
+        path: &std::path::Path,
+    ) -> Option<TextureHandle> {
+        if let Some(texture) = self.photo_texture_cache.get(path) {
+            return Some(texture.clone());
+        }
+        let image = Self::decode_photo_color_image(path)?;
+        let texture = ctx.load_texture(
+            format!("photo:{}", path.display()),
+            image,
+            TextureOptions::LINEAR,
+        );
+        self.photo_texture_cache
+            .insert(path.to_path_buf(), texture.clone());
+        Some(texture)
+    }
+
+    fn photo_metadata_label(path: &std::path::Path) -> Option<String> {
+        let (width, height) = image::image_dimensions(path).ok()?;
+        let bytes = std::fs::metadata(path).ok()?.len();
+        Some(format!("{width}x{height}  {}", format_size(bytes)))
+    }
+
+    fn music_track_title(path: &std::path::Path) -> String {
+        path.file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Audio Track")
+            .to_string()
+    }
+
+    fn music_track_metadata_label(path: &std::path::Path) -> Option<String> {
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_uppercase())
+            .unwrap_or_else(|| "AUDIO".to_string());
+        let bytes = std::fs::metadata(path).ok()?.len();
+        Some(format!("{extension}  {}", format_size(bytes)))
+    }
+
+    fn music_track_color_for_path(path: &std::path::Path) -> Color32 {
+        let mut hash = 0_u32;
+        for byte in path.to_string_lossy().bytes() {
+            hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
+        }
+        Color32::from_rgb(
+            80 + (hash & 0x3F) as u8,
+            90 + ((hash >> 6) & 0x4F) as u8,
+            140 + ((hash >> 12) & 0x5F) as u8,
+        )
     }
 
     fn desktop_rename_destination(target: &std::path::Path, new_name: &str) -> Option<PathBuf> {
@@ -2723,6 +2801,26 @@ impl AuroraDesktopApp {
         tracks[track_idx % tracks.len()]
     }
 
+    fn normalize_music_track_idx(track_idx: usize, real_track_count: usize) -> usize {
+        if real_track_count > 0 {
+            track_idx % real_track_count
+        } else {
+            track_idx % 5
+        }
+    }
+
+    fn current_music_track_title(track_idx: usize, real_tracks: &[PathBuf]) -> String {
+        if real_tracks.is_empty() {
+            let (name, _, _) = Self::music_track_info(track_idx);
+            name.to_string()
+        } else {
+            Self::music_track_title(&real_tracks[Self::normalize_music_track_idx(
+                track_idx,
+                real_tracks.len(),
+            )])
+        }
+    }
+
     fn photo_color(idx: usize) -> Color32 {
         let colors = [
             Color32::from_rgb(255, 107, 107),
@@ -2794,6 +2892,15 @@ impl AuroraDesktopApp {
         })
     }
 
+    fn assistant_track_match_with_paths(query: &str, real_tracks: &[PathBuf]) -> Option<usize> {
+        let lower = query.to_lowercase();
+        real_tracks.iter().position(|path| {
+            Self::music_track_title(path)
+                .to_lowercase()
+                .contains(&lower)
+        })
+    }
+
     fn execute_assistant_query(&mut self, query: &str, record_user: bool) {
         let trimmed = query.trim();
         if trimmed.is_empty() {
@@ -2859,8 +2966,12 @@ impl AuroraDesktopApp {
             }
             AssistantIntent::Weather => Self::assistant_weather_summary().to_string(),
             AssistantIntent::PlaySong(song) => {
+                let real_tracks = Self::music_library_paths(&dirs_home());
                 if let Some(song_name) = song {
-                    if let Some(idx) = Self::assistant_track_match(&song_name) {
+                    if let Some(idx) = Self::assistant_track_match_with_paths(&song_name, &real_tracks)
+                    {
+                        self.music_track_idx = idx;
+                    } else if let Some(idx) = Self::assistant_track_match(&song_name) {
                         self.music_track_idx = idx;
                     }
                 }
@@ -2869,7 +2980,7 @@ impl AuroraDesktopApp {
                 win.open = true;
                 win.minimized = false;
                 self.bring_to_front(WindowKind::MusicPlayer);
-                let (track, _, _) = Self::music_track_info(self.music_track_idx);
+                let track = Self::current_music_track_title(self.music_track_idx, &real_tracks);
                 format!("Playing {track}.")
             }
             AssistantIntent::Fallback => {
@@ -8302,15 +8413,26 @@ impl AuroraDesktopApp {
         ];
         let real_tracks = Self::music_library_paths(&dirs_home());
         let using_real_tracks = !real_tracks.is_empty();
+        let current_real_track =
+            using_real_tracks.then(|| {
+                &real_tracks[Self::normalize_music_track_idx(
+                    self.music_track_idx,
+                    real_tracks.len(),
+                )]
+            });
         let (name, artist, color) = if using_real_tracks {
-            let path = &real_tracks[self.music_track_idx % real_tracks.len()];
             (
-                path.file_stem().and_then(|name| name.to_str()).unwrap_or("Audio Track"),
+                current_real_track
+                    .map(|path| Self::music_track_title(path))
+                    .unwrap_or_else(|| "Audio Track".to_string()),
                 "Local Music Library",
-                Color32::from_rgb(255, 55, 95),
+                current_real_track
+                    .map(|path| Self::music_track_color_for_path(path))
+                    .unwrap_or(Color32::from_rgb(255, 55, 95)),
             )
         } else {
-            Self::music_track_info(self.music_track_idx)
+            let (name, artist, color) = Self::music_track_info(self.music_track_idx);
+            (name.to_string(), artist, color)
         };
 
         // Album art
@@ -8336,7 +8458,7 @@ impl AuroraDesktopApp {
             ui.vertical(|ui| {
                 ui.add_space(12.0);
                 ui.label(
-                    RichText::new(name)
+                    RichText::new(&name)
                         .size(16.0)
                         .strong()
                         .color(Color32::WHITE),
@@ -8346,6 +8468,15 @@ impl AuroraDesktopApp {
                         .size(12.0)
                         .color(Color32::from_gray(150)),
                 );
+                if let Some(path) = current_real_track {
+                    if let Some(metadata) = Self::music_track_metadata_label(path) {
+                        ui.label(
+                            RichText::new(metadata)
+                                .size(10.0)
+                                .color(Color32::from_gray(120)),
+                        );
+                    }
+                }
             });
         });
 
@@ -8398,10 +8529,9 @@ impl AuroraDesktopApp {
                 } else {
                     tracks.len()
                 };
-                self.music_track_idx = self
-                    .music_track_idx
-                    .checked_sub(1)
-                    .unwrap_or(len - 1);
+                self.music_track_idx = self.music_track_idx.checked_sub(1).unwrap_or(len - 1);
+                self.music_track_idx =
+                    Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len());
             }
             // Play/Pause
             let play_label = if self.music_playing { "| |" } else { " > " };
@@ -8437,6 +8567,8 @@ impl AuroraDesktopApp {
                     tracks.len()
                 };
                 self.music_track_idx = (self.music_track_idx + 1) % len;
+                self.music_track_idx =
+                    Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len());
             }
             if ui
                 .add(
@@ -8453,10 +8585,14 @@ impl AuroraDesktopApp {
 
         ui.add_space(12.0);
         ui.label(
-            RichText::new(if using_real_tracks { "Local Library" } else { "Up Next" })
-                .size(12.0)
-                .strong()
-                .color(Color32::from_gray(160)),
+            RichText::new(if using_real_tracks {
+                "Local Library"
+            } else {
+                "Up Next"
+            })
+            .size(12.0)
+            .strong()
+            .color(Color32::from_gray(160)),
         );
         ui.add_space(4.0);
 
@@ -8466,7 +8602,9 @@ impl AuroraDesktopApp {
             .show(ui, |ui| {
                 if using_real_tracks {
                     for (i, path) in real_tracks.iter().enumerate() {
-                        let is_current = i == self.music_track_idx;
+                        let is_current =
+                            i == Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len());
+                        let track_color = Self::music_track_color_for_path(path);
                         let bg = if is_current {
                             Color32::from_rgba_unmultiplied(255, 255, 255, 15)
                         } else {
@@ -8480,7 +8618,7 @@ impl AuroraDesktopApp {
                                 ui.horizontal(|ui| {
                                     let (dot_r, _) =
                                         ui.allocate_exact_size(Vec2::splat(8.0), Sense::hover());
-                                    ui.painter().circle_filled(dot_r.center(), 4.0, color);
+                                    ui.painter().circle_filled(dot_r.center(), 4.0, track_color);
                                     if is_current && self.music_playing {
                                         ui.label(RichText::new("♪").size(11.0).color(color));
                                     }
@@ -8491,18 +8629,23 @@ impl AuroraDesktopApp {
                                             Color32::from_gray(200)
                                         };
                                         ui.label(
-                                            RichText::new(
-                                                path.file_stem()
-                                                    .and_then(|name| name.to_str())
-                                                    .unwrap_or("Audio Track"),
-                                            )
-                                            .size(12.0)
-                                            .color(name_color),
+                                            RichText::new(Self::music_track_title(path))
+                                                .size(12.0)
+                                                .color(name_color),
                                         );
+                                        if let Some(metadata) =
+                                            Self::music_track_metadata_label(path)
+                                        {
+                                            ui.label(
+                                                RichText::new(metadata)
+                                                    .size(10.0)
+                                                    .color(Color32::from_gray(120)),
+                                            );
+                                        }
                                         ui.label(
                                             RichText::new(path.to_string_lossy())
-                                                .size(10.0)
-                                                .color(Color32::from_gray(120)),
+                                                .size(9.0)
+                                                .color(Color32::from_gray(95)),
                                         );
                                     });
                                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -8544,7 +8687,9 @@ impl AuroraDesktopApp {
                                         } else {
                                             Color32::from_gray(200)
                                         };
-                                        ui.label(RichText::new(*t_name).size(12.0).color(name_color));
+                                        ui.label(
+                                            RichText::new(*t_name).size(12.0).color(name_color),
+                                        );
                                         ui.label(
                                             RichText::new(*t_artist)
                                                 .size(10.0)
@@ -8572,7 +8717,12 @@ impl AuroraDesktopApp {
             } else {
                 ["All Photos", "Favorites", "Albums", "People"]
             } {
-                let active = tab == if using_real_photos { "Library" } else { "All Photos" };
+                let active = tab
+                    == if using_real_photos {
+                        "Library"
+                    } else {
+                        "All Photos"
+                    };
                 let bg = if active {
                     Color32::from_rgba_unmultiplied(0, 122, 255, 80)
                 } else {
@@ -8641,14 +8791,29 @@ impl AuroraDesktopApp {
                             colors[i]
                         };
                         let (rect, resp) = ui.allocate_exact_size(thumb_size, Sense::click());
-                        // Gradient fill to simulate photo
-                        let lighter = Color32::from_rgba_unmultiplied(
-                            (color.r() as u16 + 40).min(255) as u8,
-                            (color.g() as u16 + 40).min(255) as u8,
-                            (color.b() as u16 + 40).min(255) as u8,
-                            255,
-                        );
-                        gradient_rect(ui.painter(), rect, lighter, color);
+                        let mut painted_texture = false;
+                        if using_real_photos {
+                            if let Some(texture) =
+                                self.photo_texture_for_path(ui.ctx(), &photo_paths[i])
+                            {
+                                ui.painter().image(
+                                    texture.id(),
+                                    rect,
+                                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                                    Color32::WHITE,
+                                );
+                                painted_texture = true;
+                            }
+                        }
+                        if !painted_texture {
+                            let lighter = Color32::from_rgba_unmultiplied(
+                                (color.r() as u16 + 40).min(255) as u8,
+                                (color.g() as u16 + 40).min(255) as u8,
+                                (color.b() as u16 + 40).min(255) as u8,
+                                255,
+                            );
+                            gradient_rect(ui.painter(), rect, lighter, color);
+                        }
                         ui.painter().rect_stroke(
                             rect,
                             CornerRadius::same(4),
@@ -8698,12 +8863,6 @@ impl AuroraDesktopApp {
         // Photo lightbox viewer
         if let Some(idx) = self.photo_viewer_idx {
             let color = Self::photo_color(idx);
-            let lighter = Color32::from_rgba_unmultiplied(
-                (color.r() as u16 + 40).min(255) as u8,
-                (color.g() as u16 + 40).min(255) as u8,
-                (color.b() as u16 + 40).min(255) as u8,
-                255,
-            );
 
             // Dim overlay
             let full = ui.max_rect();
@@ -8713,14 +8872,34 @@ impl AuroraDesktopApp {
             // Large photo
             let photo_size = Vec2::new(full.width() * 0.7, full.height() * 0.7);
             let photo_rect = Rect::from_center_size(full.center(), photo_size);
-            gradient_rect(ui.painter(), photo_rect, lighter, color);
+            let mut painted_texture = false;
+            if using_real_photos {
+                if let Some(texture) = self.photo_texture_for_path(ui.ctx(), &photo_paths[idx]) {
+                    ui.painter().image(
+                        texture.id(),
+                        photo_rect,
+                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                        Color32::WHITE,
+                    );
+                    painted_texture = true;
+                }
+            }
+            if !painted_texture {
+                let lighter = Color32::from_rgba_unmultiplied(
+                    (color.r() as u16 + 40).min(255) as u8,
+                    (color.g() as u16 + 40).min(255) as u8,
+                    (color.b() as u16 + 40).min(255) as u8,
+                    255,
+                );
+                gradient_rect(ui.painter(), photo_rect, lighter, color);
+            }
             ui.painter().rect_stroke(
                 photo_rect,
                 CornerRadius::same(8),
                 Stroke::new(1.0, Color32::from_white_alpha(40)),
                 StrokeKind::Outside,
             );
-            if using_real_photos {
+            if using_real_photos && !painted_texture {
                 let label = photo_paths[idx]
                     .file_name()
                     .and_then(|name| name.to_str())
@@ -8746,6 +8925,17 @@ impl AuroraDesktopApp {
                 FontId::proportional(12.0),
                 Color32::from_gray(180),
             );
+            if using_real_photos {
+                if let Some(metadata) = Self::photo_metadata_label(&photo_paths[idx]) {
+                    ui.painter().text(
+                        Pos2::new(photo_rect.center().x, photo_rect.bottom() + 34.0),
+                        Align2::CENTER_TOP,
+                        metadata,
+                        FontId::proportional(11.0),
+                        Color32::from_gray(160),
+                    );
+                }
+            }
 
             // Navigation arrows
             let left_rect = Rect::from_center_size(
@@ -8785,7 +8975,11 @@ impl AuroraDesktopApp {
                     Color32::from_gray(160)
                 },
             );
-            let total_photos = if using_real_photos { photo_paths.len() } else { colors.len() };
+            let total_photos = if using_real_photos {
+                photo_paths.len()
+            } else {
+                colors.len()
+            };
             if right_resp.clicked() && idx + 1 < total_photos {
                 self.photo_viewer_idx = Some(idx + 1);
             }
@@ -8841,7 +9035,8 @@ impl AuroraDesktopApp {
                     Pos2::new(photo_rect.center().x, photo_rect.top() - 12.0),
                     Vec2::new(74.0, 24.0),
                 );
-                let open_resp = ui.interact(open_rect, Id::new("photo_open_system"), Sense::click());
+                let open_resp =
+                    ui.interact(open_rect, Id::new("photo_open_system"), Sense::click());
                 ui.painter().rect_filled(
                     open_rect,
                     CornerRadius::same(6),
@@ -10539,6 +10734,40 @@ impl AuroraDesktopApp {
                             WindowKind::NetworkDiagnostics => {
                                 self.network_diagnostics.render(ui, &self.clipboard)
                             }
+                            WindowKind::Dictionary => self.dictionary_app.render(ui),
+                            WindowKind::Console => {
+                                if self.proc_manager.is_none() {
+                                    self.proc_manager = Some(ProcessManager::new());
+                                }
+                                let process_snapshot = self
+                                    .proc_manager
+                                    .as_ref()
+                                    .map(|pm| pm.list_sorted_by_cpu())
+                                    .unwrap_or_default();
+                                let telemetry_snapshot = ConsoleTelemetrySnapshot {
+                                    connected: self.telemetry.connected,
+                                    status: self.telemetry.status.clone(),
+                                    health: self.telemetry.health.clone(),
+                                    uptime: self.telemetry.uptime.clone(),
+                                    last_error: self.telemetry.last_error.clone(),
+                                    network_name: if self.sysinfo.network_up {
+                                        self.sysinfo.network_name.clone()
+                                    } else {
+                                        "disconnected".to_string()
+                                    },
+                                    process_count: self.sysinfo.process_count,
+                                };
+                                let toast_snapshot =
+                                    self.toast_manager.visible().collect::<Vec<_>>();
+                                self.console_app.render(
+                                    ui,
+                                    &telemetry_snapshot,
+                                    self.notification_center.all(),
+                                    &toast_snapshot,
+                                    &process_snapshot,
+                                    &dirs_home().join(".aurora_logs"),
+                                );
+                            }
                         }
                     }); // end inner padding Frame
 
@@ -12131,6 +12360,8 @@ impl AuroraDesktopApp {
                                 ("Photos", WindowKind::Photos),
                                 ("Calendar", WindowKind::Calendar),
                                 ("Network Diagnostics", WindowKind::NetworkDiagnostics),
+                                ("Dictionary", WindowKind::Dictionary),
+                                ("Console", WindowKind::Console),
                             ];
                             let app_hits = apps
                                 .iter()
@@ -13694,6 +13925,8 @@ impl AuroraDesktopApp {
                                         WindowKind::NetworkDiagnostics => {
                                             Color32::from_rgb(0, 122, 255)
                                         }
+                                        WindowKind::Dictionary => Color32::from_rgb(255, 214, 10),
+                                        WindowKind::Console => Color32::from_rgb(88, 86, 214),
                                         _ => Color32::from_rgb(88, 86, 214),
                                     };
                                     ui.painter().rect_filled(
@@ -14109,8 +14342,25 @@ impl AuroraDesktopApp {
 
                     match &pip.source {
                         PipSource::Music => {
-                            let (name, artist, color) =
-                                Self::music_track_info(self.music_track_idx);
+                            let real_tracks = Self::music_library_paths(&dirs_home());
+                            let current_real_track = (!real_tracks.is_empty())
+                                .then(|| {
+                                    &real_tracks[Self::normalize_music_track_idx(
+                                        self.music_track_idx,
+                                        real_tracks.len(),
+                                    )]
+                                });
+                            let (name, artist, color) = if let Some(path) = current_real_track {
+                                (
+                                    Self::music_track_title(path),
+                                    "Local Music Library",
+                                    Self::music_track_color_for_path(path),
+                                )
+                            } else {
+                                let (name, artist, color) =
+                                    Self::music_track_info(self.music_track_idx);
+                                (name.to_string(), artist, color)
+                            };
                             let cover = Rect::from_min_size(
                                 ui.cursor().min,
                                 Vec2::new(pip.size.x - 20.0, pip.size.y - 58.0),
@@ -14137,7 +14387,7 @@ impl AuroraDesktopApp {
                             );
                             ui.allocate_space(cover.size());
                             ui.label(
-                                RichText::new(name)
+                                RichText::new(&name)
                                     .size(13.0)
                                     .strong()
                                     .color(Color32::WHITE),
@@ -14147,6 +14397,15 @@ impl AuroraDesktopApp {
                                     .size(11.0)
                                     .color(Color32::from_gray(180)),
                             );
+                            if let Some(path) = current_real_track {
+                                if let Some(metadata) = Self::music_track_metadata_label(path) {
+                                    ui.label(
+                                        RichText::new(metadata)
+                                            .size(10.0)
+                                            .color(Color32::from_gray(185)),
+                                    );
+                                }
+                            }
                             if controls_visible
                                 && ui
                                     .button(if self.music_playing { "Pause" } else { "Play" })
@@ -14156,31 +14415,67 @@ impl AuroraDesktopApp {
                             }
                         }
                         PipSource::Photo(idx) => {
-                            let color = Self::photo_color(*idx);
-                            let lighter = Color32::from_rgba_unmultiplied(
-                                (color.r() as u16 + 40).min(255) as u8,
-                                (color.g() as u16 + 40).min(255) as u8,
-                                (color.b() as u16 + 40).min(255) as u8,
-                                255,
-                            );
+                            let photo_paths = Self::photo_library_paths(&dirs_home());
+                            let photo_path = photo_paths.get(*idx);
                             let photo = Rect::from_min_size(
                                 ui.cursor().min,
                                 Vec2::new(pip.size.x - 20.0, pip.size.y - 58.0),
                             );
-                            gradient_rect(ui.painter(), photo, lighter, color);
-                            ui.painter().text(
-                                photo.center(),
-                                Align2::CENTER_CENTER,
-                                format!("Photo {}", idx + 1),
-                                FontId::proportional(18.0),
-                                Color32::WHITE,
-                            );
+                            let mut painted_texture = false;
+                            if let Some(path) = photo_path {
+                                if let Some(texture) = self.photo_texture_for_path(ui.ctx(), path) {
+                                    ui.painter().image(
+                                        texture.id(),
+                                        photo,
+                                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                                        Color32::WHITE,
+                                    );
+                                    painted_texture = true;
+                                }
+                            }
+                            if !painted_texture {
+                                let color = Self::photo_color(*idx);
+                                let lighter = Color32::from_rgba_unmultiplied(
+                                    (color.r() as u16 + 40).min(255) as u8,
+                                    (color.g() as u16 + 40).min(255) as u8,
+                                    (color.b() as u16 + 40).min(255) as u8,
+                                    255,
+                                );
+                                gradient_rect(ui.painter(), photo, lighter, color);
+                                ui.painter().text(
+                                    photo.center(),
+                                    Align2::CENTER_CENTER,
+                                    format!("Photo {}", idx + 1),
+                                    FontId::proportional(18.0),
+                                    Color32::WHITE,
+                                );
+                            }
                             ui.allocate_space(photo.size());
-                            ui.label(
-                                RichText::new("Floating preview")
-                                    .size(11.0)
-                                    .color(Color32::from_gray(185)),
-                            );
+                            if let Some(path) = photo_path {
+                                let label = path
+                                    .file_name()
+                                    .and_then(|name| name.to_str())
+                                    .unwrap_or("Photo");
+                                ui.label(
+                                    RichText::new(label)
+                                        .size(11.0)
+                                        .strong()
+                                        .color(Color32::WHITE),
+                                );
+                                if let Some(metadata) = Self::photo_metadata_label(path) {
+                                    ui.label(
+                                        RichText::new(metadata)
+                                            .size(10.0)
+                                            .color(Color32::from_gray(185)),
+                                    );
+                                }
+                            } else {
+                                ui.label(
+                                    RichText::new("Floating preview")
+                                        .size(11.0)
+                                        .color(Color32::from_gray(185)),
+                                );
+                            }
                         }
                         PipSource::Browser { title, url } => {
                             let card = Rect::from_min_size(
@@ -14486,11 +14781,16 @@ impl AuroraDesktopApp {
             "Settings" => Some(WindowKind::Settings),
             "Activity Monitor" => Some(WindowKind::ProcessManager),
             "Network Diagnostics" => Some(WindowKind::NetworkDiagnostics),
+            "Dictionary" => Some(WindowKind::Dictionary),
+            "Console" => Some(WindowKind::Console),
             "Messages" => Some(WindowKind::Messages),
             "Quick Controls" => Some(WindowKind::Controls),
             _ => None,
         };
         if let Some(wk) = kind {
+            if wk == WindowKind::Dictionary {
+                self.dictionary_app.open_word("aurora");
+            }
             let win = self.window_mut(wk);
             win.restore();
             win.id_epoch = win.id_epoch.saturating_add(1);
@@ -15311,6 +15611,17 @@ impl eframe::App for AuroraDesktopApp {
 
         // Handle spotlight window open
         if let Some(kind) = self.spotlight_open_window.take() {
+            if kind == WindowKind::Dictionary {
+                if let Some(word) = self
+                    .spotlight_query
+                    .trim()
+                    .strip_prefix("define ")
+                    .map(str::trim)
+                    .filter(|word| !word.is_empty())
+                {
+                    self.dictionary_app.open_word(word);
+                }
+            }
             let win = self.window_mut(kind);
             win.restore();
             win.id_epoch = win.id_epoch.saturating_add(1);
@@ -15473,6 +15784,17 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "{label}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
 
     // ── Wallpaper presets ────────────────────────────────────────────────
 
@@ -16005,7 +16327,7 @@ mod tests {
 
     #[test]
     fn smart_folder_entries_for_token_supports_large_files_and_tags() {
-        let root = std::env::temp_dir().join("aurora_smart_folder_tokens");
+        let root = unique_temp_dir("aurora_smart_folder_tokens");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
 
@@ -16031,7 +16353,7 @@ mod tests {
 
     #[test]
     fn smart_folder_entries_for_token_supports_multi_tag_and_custom_rules() {
-        let root = std::env::temp_dir().join("aurora_smart_folder_custom_tokens");
+        let root = unique_temp_dir("aurora_smart_folder_custom_tokens");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
 
@@ -16194,6 +16516,163 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn photo_library_paths_filters_supported_images() {
+        let root = std::env::temp_dir().join(format!(
+            "aurora_photo_library_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let pictures = root.join("Pictures");
+        std::fs::create_dir_all(&pictures).unwrap();
+        std::fs::write(pictures.join("one.png"), "a").unwrap();
+        std::fs::write(pictures.join("two.webp"), "b").unwrap();
+        std::fs::write(pictures.join("notes.txt"), "c").unwrap();
+
+        let photos = AuroraDesktopApp::photo_library_paths(&root);
+        assert_eq!(
+            photos,
+            vec![pictures.join("one.png"), pictures.join("two.webp")]
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn music_library_paths_filters_supported_audio() {
+        let root = std::env::temp_dir().join(format!(
+            "aurora_music_library_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let music = root.join("Music");
+        std::fs::create_dir_all(&music).unwrap();
+        std::fs::write(music.join("one.mp3"), "a").unwrap();
+        std::fs::write(music.join("two.flac"), "b").unwrap();
+        std::fs::write(music.join("cover.jpg"), "c").unwrap();
+
+        let tracks = AuroraDesktopApp::music_library_paths(&root);
+        assert_eq!(tracks, vec![music.join("one.mp3"), music.join("two.flac")]);
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn decode_photo_color_image_reads_png_dimensions() {
+        let root = std::env::temp_dir().join(format!(
+            "aurora_photo_decode_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("sample.png");
+
+        let image = image::RgbaImage::from_fn(2, 3, |x, y| {
+            image::Rgba([(x * 20) as u8, (y * 30) as u8, 120, 255])
+        });
+        image.save(&path).unwrap();
+
+        let decoded = AuroraDesktopApp::decode_photo_color_image(&path).unwrap();
+        assert_eq!(decoded.size, [2, 3]);
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn photo_metadata_label_reports_dimensions_and_size() {
+        let root = std::env::temp_dir().join(format!(
+            "aurora_photo_metadata_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("meta.png");
+
+        let image = image::RgbaImage::from_fn(4, 5, |x, y| {
+            image::Rgba([(x * 10) as u8, (y * 20) as u8, 180, 255])
+        });
+        image.save(&path).unwrap();
+
+        let label = AuroraDesktopApp::photo_metadata_label(&path).unwrap();
+        assert!(label.contains("4x5"));
+        assert!(label.ends_with('B'));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn music_track_helpers_report_title_metadata_and_stable_color() {
+        let root = std::env::temp_dir().join(format!(
+            "aurora_music_metadata_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("midnight_drive.flac");
+        std::fs::write(&path, b"audio-bytes").unwrap();
+
+        assert_eq!(
+            AuroraDesktopApp::music_track_title(&path),
+            "midnight_drive".to_string()
+        );
+        let metadata = AuroraDesktopApp::music_track_metadata_label(&path).unwrap();
+        assert!(metadata.contains("FLAC"));
+        assert!(metadata.ends_with('B'));
+        assert_eq!(
+            AuroraDesktopApp::music_track_color_for_path(&path),
+            AuroraDesktopApp::music_track_color_for_path(&path)
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn assistant_track_match_with_paths_prefers_real_library_matches() {
+        let tracks = vec![
+            PathBuf::from("C:/Users/test/Music/Night Drive.mp3"),
+            PathBuf::from("C:/Users/test/Music/Deep Focus.flac"),
+        ];
+        assert_eq!(
+            AuroraDesktopApp::assistant_track_match_with_paths("focus", &tracks),
+            Some(1)
+        );
+        assert_eq!(
+            AuroraDesktopApp::assistant_track_match_with_paths("missing", &tracks),
+            None
+        );
+    }
+
+    #[test]
+    fn current_music_track_title_uses_real_library_when_available() {
+        let tracks = vec![
+            PathBuf::from("C:/Users/test/Music/First Song.mp3"),
+            PathBuf::from("C:/Users/test/Music/Second Song.flac"),
+        ];
+        assert_eq!(
+            AuroraDesktopApp::current_music_track_title(3, &tracks),
+            "Second Song".to_string()
+        );
+        assert_eq!(
+            AuroraDesktopApp::current_music_track_title(1, &[]),
+            "Neon Waves".to_string()
+        );
     }
 
     #[test]
@@ -16378,7 +16857,7 @@ mod tests {
 
     #[test]
     fn smoke_desktop_move_flow_moves_file_between_user_visible_locations() {
-        let root = std::env::temp_dir().join("aurora_smoke_move_flow");
+        let root = unique_temp_dir("aurora_smoke_move_flow");
         let _ = std::fs::remove_dir_all(&root);
         let desktop = root.join("Desktop");
         let documents = root.join("Documents");
@@ -16596,7 +17075,7 @@ mod tests {
 
     #[test]
     fn smoke_file_manager_preview_flow_builds_preview_and_info_for_selected_entry() {
-        let root = std::env::temp_dir().join("aurora_smoke_preview_flow");
+        let root = unique_temp_dir("aurora_smoke_preview_flow");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("note.txt");

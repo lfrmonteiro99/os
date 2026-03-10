@@ -172,6 +172,17 @@ impl FileTags {
 mod tests {
     use super::*;
 
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "{label}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
     #[test]
     fn assign_adds_tag_once() {
         let path = PathBuf::from("C:/test/file.txt");
@@ -202,7 +213,7 @@ mod tests {
 
     #[test]
     fn entries_with_tag_filters_existing_files_under_root() {
-        let root = std::env::temp_dir().join("aurora_tag_entries");
+        let root = unique_temp_dir("aurora_tag_entries");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("nested")).unwrap();
 
@@ -232,7 +243,7 @@ mod tests {
 
     #[test]
     fn entries_with_tags_support_any_and_all_matching() {
-        let root = std::env::temp_dir().join("aurora_tag_entries_multi");
+        let root = unique_temp_dir("aurora_tag_entries_multi");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
 

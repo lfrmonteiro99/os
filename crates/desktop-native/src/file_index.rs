@@ -569,6 +569,9 @@ fn copy_directory_recursive(source: &Path, destination: &Path) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     // ── dirs_home ────────────────────────────────────────────────────
 
@@ -670,9 +673,25 @@ mod tests {
     // ── File CRUD ────────────────────────────────────────────────────
 
     fn test_dir() -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join("aurora_crud_test");
+        let unique = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "aurora_crud_test_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         dir
+    }
+
+    fn cleanup_dir(path: &Path) {
+        for _ in 0..5 {
+            if std::fs::remove_dir_all(path).is_ok() || !path.exists() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let _ = std::fs::remove_dir_all(path);
     }
 
     #[test]
@@ -742,7 +761,7 @@ mod tests {
     #[test]
     fn move_entry_to_directory_moves_file() {
         let root = test_dir().join("move_entry_to_dir");
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
         let from_dir = root.join("from");
         let to_dir = root.join("to");
         std::fs::create_dir_all(&from_dir).unwrap();
@@ -755,13 +774,13 @@ mod tests {
         assert!(!source.exists());
         assert!(moved.exists());
 
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
     }
 
     #[test]
     fn move_entry_to_directory_rejects_existing_destination() {
         let root = test_dir().join("move_entry_conflict");
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
         let from_dir = root.join("from");
         let to_dir = root.join("to");
         std::fs::create_dir_all(&from_dir).unwrap();
@@ -775,13 +794,13 @@ mod tests {
         assert_eq!(err, "Destination already exists");
         assert!(source.exists());
 
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
     }
 
     #[test]
     fn copy_entry_to_directory_copies_file_without_removing_source() {
         let root = test_dir().join("copy_entry_to_dir");
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
         let from_dir = root.join("from");
         let to_dir = root.join("to");
         std::fs::create_dir_all(&from_dir).unwrap();
@@ -794,7 +813,7 @@ mod tests {
         assert!(source.exists());
         assert!(copied.exists());
 
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
     }
 
     #[test]
@@ -826,7 +845,7 @@ mod tests {
     #[test]
     fn move_to_trash_moves_file_and_records_manifest() {
         let root = test_dir().join("trash_backend_file");
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join("delete_me.txt");
         std::fs::write(&file, "bye").unwrap();
@@ -838,13 +857,13 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].original_path, file);
 
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
     }
 
     #[test]
     fn restore_trash_entry_moves_file_back() {
         let root = test_dir().join("trash_backend_restore");
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join("restore_me.txt");
         std::fs::write(&file, "hello").unwrap();
@@ -855,13 +874,13 @@ mod tests {
         assert!(file.exists());
         assert!(load_trash_entries_in(&root).is_empty());
 
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
     }
 
     #[test]
     fn empty_trash_removes_entries_and_files() {
         let root = test_dir().join("trash_backend_empty");
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join("purge_me.txt");
         std::fs::write(&file, "hello").unwrap();
@@ -872,7 +891,7 @@ mod tests {
         assert!(!trash_dir_in(&root).join(&entry.trash_name).exists());
         assert!(load_trash_entries_in(&root).is_empty());
 
-        let _ = std::fs::remove_dir_all(&root);
+        cleanup_dir(&root);
     }
 
     #[test]
