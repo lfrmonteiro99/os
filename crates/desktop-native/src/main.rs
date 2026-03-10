@@ -6,10 +6,12 @@ mod calculator;
 mod clipboard;
 mod console;
 mod dictionary;
+mod disk_utility;
 mod embedded_app;
 mod emoji_picker;
 mod file_index;
 mod file_tags;
+mod font_book;
 mod icons;
 mod messages;
 mod network_diag;
@@ -52,6 +54,7 @@ use calculator::{calc_eval, format_calc};
 use clipboard::AppClipboard;
 use console::{ConsoleApp, ConsoleTelemetrySnapshot};
 use dictionary::{inline_definition as dictionary_inline_definition, DictionaryApp};
+use disk_utility::DiskUtilityApp;
 use embedded_app::EmbeddedApp;
 use emoji_picker::{
     filtered_entries as filtered_emoji_entries, find_by_symbol as find_emoji_by_symbol,
@@ -64,6 +67,7 @@ use file_index::{
     smart_folder_entries, trash_dir, CustomSmartFolder, FileIndex, FmEntry, SmartFolderKind,
 };
 use file_tags::{FileTags, TagColor};
+use font_book::FontBookApp;
 use messages::MessagesState;
 use network_diag::NetworkDiagnostics;
 use notifications::NotificationCenter;
@@ -733,6 +737,10 @@ struct AuroraDesktopApp {
     music_playing: bool,
     music_track_idx: usize,
     music_library_query: String,
+    music_shuffle: bool,
+    music_repeat_all: bool,
+    music_elapsed_seconds: f32,
+    music_last_tick: Instant,
     // Text editor state
     editor_file_path: Option<PathBuf>,
     editor_content: String,
@@ -822,8 +830,10 @@ struct AuroraDesktopApp {
     // Process manager
     proc_manager: Option<ProcessManager>,
     network_diagnostics: NetworkDiagnostics,
+    disk_utility: DiskUtilityApp,
     dictionary_app: DictionaryApp,
     console_app: ConsoleApp,
+    font_book: FontBookApp,
     proc_search: String,
     proc_sort_by_cpu: bool,
     // Auto-save
@@ -1049,8 +1059,10 @@ impl AuroraDesktopApp {
                 ManagedWindow::new(Pos2::new(250.0, 70.0), Vec2::new(560.0, 420.0)),  // ProcessManager
                 ManagedWindow::new(Pos2::new(500.0, 90.0), Vec2::new(520.0, 420.0)),  // Trash
                 ManagedWindow::new(Pos2::new(420.0, 110.0), Vec2::new(520.0, 360.0)), // NetworkDiagnostics
+                ManagedWindow::new(Pos2::new(280.0, 90.0), Vec2::new(820.0, 520.0)),  // DiskUtility
                 ManagedWindow::new(Pos2::new(260.0, 90.0), Vec2::new(700.0, 520.0)),  // Dictionary
                 ManagedWindow::new(Pos2::new(220.0, 80.0), Vec2::new(860.0, 560.0)),  // Console
+                ManagedWindow::new(Pos2::new(240.0, 70.0), Vec2::new(960.0, 600.0)),  // FontBook
             ],
             z_order: vec![
                 WindowKind::Overview, WindowKind::FileManager, WindowKind::Browser,
@@ -1116,6 +1128,10 @@ impl AuroraDesktopApp {
             music_playing: false,
             music_track_idx: 0,
             music_library_query: String::new(),
+            music_shuffle: false,
+            music_repeat_all: true,
+            music_elapsed_seconds: 0.0,
+            music_last_tick: Instant::now(),
             editor_file_path: None,
             editor_content: String::new(),
             editor_modified: false,
@@ -1190,8 +1206,10 @@ impl AuroraDesktopApp {
             clipboard: AppClipboard::new(),
             proc_manager: None,
             network_diagnostics: NetworkDiagnostics::new(),
+            disk_utility: DiskUtilityApp::new(),
             dictionary_app: DictionaryApp::new(),
             console_app: ConsoleApp::new(),
+            font_book: FontBookApp::new(),
             proc_search: String::new(),
             proc_sort_by_cpu: true,
             auto_save: AutoSave::new(30, dirs_home()),
@@ -1255,8 +1273,10 @@ impl AuroraDesktopApp {
         app.windows[WindowKind::Settings as usize].open = false;
         app.windows[WindowKind::ProcessManager as usize].open = false;
         app.windows[WindowKind::NetworkDiagnostics as usize].open = false;
+        app.windows[WindowKind::DiskUtility as usize].open = false;
         app.windows[WindowKind::Dictionary as usize].open = false;
         app.windows[WindowKind::Console as usize].open = false;
+        app.windows[WindowKind::FontBook as usize].open = false;
         app.load_state();
         // Apply persisted settings
         app.cc_volume = app.app_settings.volume;
@@ -2814,10 +2834,44 @@ impl AuroraDesktopApp {
             let (name, _, _) = Self::music_track_info(track_idx);
             name.to_string()
         } else {
-            Self::music_track_title(&real_tracks[Self::normalize_music_track_idx(
-                track_idx,
-                real_tracks.len(),
-            )])
+            Self::music_track_title(
+                &real_tracks[Self::normalize_music_track_idx(track_idx, real_tracks.len())],
+            )
+        }
+    }
+
+    fn music_track_duration_seconds(track_idx: usize, real_track: Option<&std::path::Path>) -> f32 {
+        if let Some(path) = real_track {
+            let bytes = std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0);
+            let ext_bonus = match path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "flac" | "wav" => 45.0,
+                "m4a" | "aac" => 25.0,
+                _ => 0.0,
+            };
+            ((bytes as f32 / 48_000.0) + 90.0 + ext_bonus).clamp(90.0, 420.0)
+        } else {
+            const MOCK_DURATIONS: [f32; 5] = [208.0, 194.0, 236.0, 221.0, 245.0];
+            MOCK_DURATIONS[track_idx % MOCK_DURATIONS.len()]
+        }
+    }
+
+    fn format_music_time(seconds: f32) -> String {
+        let total = seconds.max(0.0).round() as u32;
+        format!("{}:{:02}", total / 60, total % 60)
+    }
+
+    fn advance_music_elapsed(elapsed: f32, delta: f32, duration: f32) -> (f32, bool) {
+        let next = elapsed + delta.max(0.0);
+        if next >= duration {
+            (duration, true)
+        } else {
+            (next, false)
         }
     }
 
@@ -2899,6 +2953,79 @@ impl AuroraDesktopApp {
                 .to_lowercase()
                 .contains(&lower)
         })
+    }
+
+    fn filtered_music_track_indices(real_tracks: &[PathBuf], query: &str) -> Vec<usize> {
+        let trimmed = query.trim().to_lowercase();
+        if trimmed.is_empty() {
+            return (0..real_tracks.len()).collect();
+        }
+        real_tracks
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, path)| {
+                let title = Self::music_track_title(path).to_lowercase();
+                let ext = path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                if title.contains(&trimmed) || ext.contains(&trimmed) {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn music_queue_indices(real_tracks: &[PathBuf], query: &str, shuffle: bool) -> Vec<usize> {
+        let mut queue = Self::filtered_music_track_indices(real_tracks, query);
+        if shuffle {
+            queue.sort_by_key(|idx| {
+                let path = &real_tracks[*idx];
+                let mut hash = 0_u64;
+                for byte in path.to_string_lossy().bytes() {
+                    hash = hash.wrapping_mul(131).wrapping_add(byte as u64);
+                }
+                hash
+            });
+        }
+        queue
+    }
+
+    fn music_filtered_queue_position(queue: &[usize], current_idx: usize) -> Option<usize> {
+        queue.iter().position(|idx| *idx == current_idx)
+    }
+
+    fn step_music_track_idx(current_idx: usize, queue: &[usize], delta: isize) -> usize {
+        if queue.is_empty() {
+            return current_idx;
+        }
+        let current_pos = Self::music_filtered_queue_position(queue, current_idx).unwrap_or(0);
+        let len = queue.len() as isize;
+        let next_pos = (current_pos as isize + delta).rem_euclid(len) as usize;
+        queue[next_pos]
+    }
+
+    fn step_music_track_idx_with_repeat(
+        current_idx: usize,
+        queue: &[usize],
+        delta: isize,
+        repeat_all: bool,
+    ) -> Option<usize> {
+        if queue.is_empty() {
+            return None;
+        }
+        let current_pos = Self::music_filtered_queue_position(queue, current_idx).unwrap_or(0);
+        let next_pos = current_pos as isize + delta;
+        if repeat_all {
+            Some(Self::step_music_track_idx(current_idx, queue, delta))
+        } else if next_pos < 0 || next_pos >= queue.len() as isize {
+            None
+        } else {
+            Some(queue[next_pos as usize])
+        }
     }
 
     fn execute_assistant_query(&mut self, query: &str, record_user: bool) {
@@ -3023,6 +3150,65 @@ impl AuroraDesktopApp {
                 self.pending_assistant_query = None;
                 self.execute_assistant_query(&query, false);
             }
+        }
+    }
+
+    fn reset_music_progress(&mut self) {
+        self.music_elapsed_seconds = 0.0;
+        self.music_last_tick = Instant::now();
+    }
+
+    fn maybe_tick_music_playback(&mut self) {
+        let now = Instant::now();
+        let delta = now.duration_since(self.music_last_tick).as_secs_f32();
+        self.music_last_tick = now;
+        if !self.music_playing {
+            return;
+        }
+
+        let real_tracks = Self::music_library_paths(&dirs_home());
+        let using_real_tracks = !real_tracks.is_empty();
+        let filtered_indices = if using_real_tracks {
+            Self::music_queue_indices(&real_tracks, &self.music_library_query, self.music_shuffle)
+        } else {
+            Vec::new()
+        };
+        let current_real_track = using_real_tracks.then(|| {
+            &real_tracks[Self::normalize_music_track_idx(
+                self.music_track_idx,
+                real_tracks.len(),
+            )]
+        });
+        let duration =
+            Self::music_track_duration_seconds(self.music_track_idx, current_real_track.map(|p| p.as_path()));
+        let (elapsed, finished) =
+            Self::advance_music_elapsed(self.music_elapsed_seconds, delta, duration);
+        if !finished {
+            self.music_elapsed_seconds = elapsed;
+            return;
+        }
+
+        let next_idx = if using_real_tracks {
+            Self::step_music_track_idx_with_repeat(
+                self.music_track_idx,
+                &filtered_indices,
+                1,
+                self.music_repeat_all,
+            )
+        } else if self.music_repeat_all {
+            Some((self.music_track_idx + 1) % 5)
+        } else if self.music_track_idx + 1 < 5 {
+            Some(self.music_track_idx + 1)
+        } else {
+            None
+        };
+
+        if let Some(idx) = next_idx {
+            self.music_track_idx = idx;
+            self.music_elapsed_seconds = 0.0;
+        } else {
+            self.music_elapsed_seconds = duration;
+            self.music_playing = false;
         }
     }
 
@@ -8413,13 +8599,14 @@ impl AuroraDesktopApp {
         ];
         let real_tracks = Self::music_library_paths(&dirs_home());
         let using_real_tracks = !real_tracks.is_empty();
-        let current_real_track =
-            using_real_tracks.then(|| {
-                &real_tracks[Self::normalize_music_track_idx(
-                    self.music_track_idx,
-                    real_tracks.len(),
-                )]
-            });
+        let filtered_indices = if using_real_tracks {
+            Self::music_queue_indices(&real_tracks, &self.music_library_query, self.music_shuffle)
+        } else {
+            Vec::new()
+        };
+        let current_real_track = using_real_tracks.then(|| {
+            &real_tracks[Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len())]
+        });
         let (name, artist, color) = if using_real_tracks {
             (
                 current_real_track
@@ -8511,6 +8698,20 @@ impl AuroraDesktopApp {
 
         ui.add_space(8.0);
 
+        ui.horizontal(|ui| {
+            if ui.selectable_label(self.music_shuffle, "Shuffle").clicked() {
+                self.music_shuffle = !self.music_shuffle;
+            }
+            if ui
+                .selectable_label(self.music_repeat_all, "Repeat")
+                .clicked()
+            {
+                self.music_repeat_all = !self.music_repeat_all;
+            }
+        });
+
+        ui.add_space(8.0);
+
         // Controls
         ui.horizontal(|ui| {
             ui.add_space((ui.available_width() - 212.0) / 2.0);
@@ -8524,14 +8725,24 @@ impl AuroraDesktopApp {
                 )
                 .clicked()
             {
-                let len = if using_real_tracks {
-                    real_tracks.len()
+                let next_idx = if using_real_tracks {
+                    Self::step_music_track_idx_with_repeat(
+                        self.music_track_idx,
+                        &filtered_indices,
+                        -1,
+                        self.music_repeat_all,
+                    )
+                    .unwrap_or(self.music_track_idx)
                 } else {
-                    tracks.len()
+                    if self.music_repeat_all {
+                        self.music_track_idx
+                            .checked_sub(1)
+                            .unwrap_or(tracks.len() - 1)
+                    } else {
+                        self.music_track_idx.saturating_sub(1)
+                    }
                 };
-                self.music_track_idx = self.music_track_idx.checked_sub(1).unwrap_or(len - 1);
-                self.music_track_idx =
-                    Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len());
+                self.music_track_idx = next_idx;
             }
             // Play/Pause
             let play_label = if self.music_playing { "| |" } else { " > " };
@@ -8561,14 +8772,22 @@ impl AuroraDesktopApp {
                 )
                 .clicked()
             {
-                let len = if using_real_tracks {
-                    real_tracks.len()
+                let next_idx = if using_real_tracks {
+                    Self::step_music_track_idx_with_repeat(
+                        self.music_track_idx,
+                        &filtered_indices,
+                        1,
+                        self.music_repeat_all,
+                    )
+                    .unwrap_or(self.music_track_idx)
                 } else {
-                    tracks.len()
+                    if self.music_repeat_all {
+                        (self.music_track_idx + 1) % tracks.len()
+                    } else {
+                        (self.music_track_idx + 1).min(tracks.len() - 1)
+                    }
                 };
-                self.music_track_idx = (self.music_track_idx + 1) % len;
-                self.music_track_idx =
-                    Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len());
+                self.music_track_idx = next_idx;
             }
             if ui
                 .add(
@@ -8595,15 +8814,34 @@ impl AuroraDesktopApp {
             .color(Color32::from_gray(160)),
         );
         ui.add_space(4.0);
+        if using_real_tracks {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.music_library_query)
+                    .hint_text("Search local library")
+                    .desired_width(f32::INFINITY),
+            );
+            ui.add_space(6.0);
+        }
 
         // Track list
         egui::ScrollArea::vertical()
             .max_height(120.0)
             .show(ui, |ui| {
                 if using_real_tracks {
-                    for (i, path) in real_tracks.iter().enumerate() {
-                        let is_current =
-                            i == Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len());
+                    if filtered_indices.is_empty() {
+                        ui.label(
+                            RichText::new("No local tracks match this search.")
+                                .size(11.0)
+                                .color(Color32::from_gray(130)),
+                        );
+                    }
+                    for i in filtered_indices {
+                        let path = &real_tracks[i];
+                        let is_current = i
+                            == Self::normalize_music_track_idx(
+                                self.music_track_idx,
+                                real_tracks.len(),
+                            );
                         let track_color = Self::music_track_color_for_path(path);
                         let bg = if is_current {
                             Color32::from_rgba_unmultiplied(255, 255, 255, 15)
@@ -10734,6 +10972,7 @@ impl AuroraDesktopApp {
                             WindowKind::NetworkDiagnostics => {
                                 self.network_diagnostics.render(ui, &self.clipboard)
                             }
+                            WindowKind::DiskUtility => self.disk_utility.render(ui),
                             WindowKind::Dictionary => self.dictionary_app.render(ui),
                             WindowKind::Console => {
                                 if self.proc_manager.is_none() {
@@ -10768,6 +11007,7 @@ impl AuroraDesktopApp {
                                     &dirs_home().join(".aurora_logs"),
                                 );
                             }
+                            WindowKind::FontBook => self.font_book.render(ui),
                         }
                     }); // end inner padding Frame
 
@@ -12360,6 +12600,8 @@ impl AuroraDesktopApp {
                                 ("Photos", WindowKind::Photos),
                                 ("Calendar", WindowKind::Calendar),
                                 ("Network Diagnostics", WindowKind::NetworkDiagnostics),
+                                ("Disk Utility", WindowKind::DiskUtility),
+                                ("Font Book", WindowKind::FontBook),
                                 ("Dictionary", WindowKind::Dictionary),
                                 ("Console", WindowKind::Console),
                             ];
@@ -13925,8 +14167,10 @@ impl AuroraDesktopApp {
                                         WindowKind::NetworkDiagnostics => {
                                             Color32::from_rgb(0, 122, 255)
                                         }
+                                        WindowKind::DiskUtility => Color32::from_rgb(255, 159, 10),
                                         WindowKind::Dictionary => Color32::from_rgb(255, 214, 10),
                                         WindowKind::Console => Color32::from_rgb(88, 86, 214),
+                                        WindowKind::FontBook => Color32::from_rgb(191, 90, 242),
                                         _ => Color32::from_rgb(88, 86, 214),
                                     };
                                     ui.painter().rect_filled(
@@ -14343,13 +14587,12 @@ impl AuroraDesktopApp {
                     match &pip.source {
                         PipSource::Music => {
                             let real_tracks = Self::music_library_paths(&dirs_home());
-                            let current_real_track = (!real_tracks.is_empty())
-                                .then(|| {
-                                    &real_tracks[Self::normalize_music_track_idx(
-                                        self.music_track_idx,
-                                        real_tracks.len(),
-                                    )]
-                                });
+                            let current_real_track = (!real_tracks.is_empty()).then(|| {
+                                &real_tracks[Self::normalize_music_track_idx(
+                                    self.music_track_idx,
+                                    real_tracks.len(),
+                                )]
+                            });
                             let (name, artist, color) = if let Some(path) = current_real_track {
                                 (
                                     Self::music_track_title(path),
@@ -14781,6 +15024,8 @@ impl AuroraDesktopApp {
             "Settings" => Some(WindowKind::Settings),
             "Activity Monitor" => Some(WindowKind::ProcessManager),
             "Network Diagnostics" => Some(WindowKind::NetworkDiagnostics),
+            "Disk Utility" => Some(WindowKind::DiskUtility),
+            "Font Book" => Some(WindowKind::FontBook),
             "Dictionary" => Some(WindowKind::Dictionary),
             "Console" => Some(WindowKind::Console),
             "Messages" => Some(WindowKind::Messages),
@@ -15125,6 +15370,7 @@ impl eframe::App for AuroraDesktopApp {
         self.maybe_poll();
         self.handle_battery_alerts();
         self.maybe_process_assistant_query();
+        self.maybe_tick_music_playback();
 
         // Refresh real system data periodically
         if self.sysinfo.should_refresh() {
@@ -16672,6 +16918,78 @@ mod tests {
         assert_eq!(
             AuroraDesktopApp::current_music_track_title(1, &[]),
             "Neon Waves".to_string()
+        );
+    }
+
+    #[test]
+    fn filtered_music_track_indices_match_title_and_extension() {
+        let tracks = vec![
+            PathBuf::from("C:/Users/test/Music/First Song.mp3"),
+            PathBuf::from("C:/Users/test/Music/Rain Loop.flac"),
+            PathBuf::from("C:/Users/test/Music/Notes.wav"),
+        ];
+        assert_eq!(
+            AuroraDesktopApp::filtered_music_track_indices(&tracks, "rain"),
+            vec![1]
+        );
+        assert_eq!(
+            AuroraDesktopApp::filtered_music_track_indices(&tracks, "wav"),
+            vec![2]
+        );
+        assert_eq!(
+            AuroraDesktopApp::filtered_music_track_indices(&tracks, ""),
+            vec![0, 1, 2]
+        );
+    }
+
+    #[test]
+    fn music_filtered_queue_position_finds_current_track() {
+        let queue = vec![4, 1, 3];
+        assert_eq!(
+            AuroraDesktopApp::music_filtered_queue_position(&queue, 1),
+            Some(1)
+        );
+        assert_eq!(
+            AuroraDesktopApp::music_filtered_queue_position(&queue, 2),
+            None
+        );
+    }
+
+    #[test]
+    fn step_music_track_idx_wraps_within_filtered_queue() {
+        let queue = vec![4, 1, 3];
+        assert_eq!(AuroraDesktopApp::step_music_track_idx(1, &queue, 1), 3);
+        assert_eq!(AuroraDesktopApp::step_music_track_idx(1, &queue, -1), 4);
+        assert_eq!(AuroraDesktopApp::step_music_track_idx(9, &queue, 1), 1);
+    }
+
+    #[test]
+    fn music_queue_indices_can_shuffle_stably() {
+        let tracks = vec![
+            PathBuf::from("C:/Users/test/Music/C Song.mp3"),
+            PathBuf::from("C:/Users/test/Music/A Song.mp3"),
+            PathBuf::from("C:/Users/test/Music/B Song.mp3"),
+        ];
+        let queue_a = AuroraDesktopApp::music_queue_indices(&tracks, "", true);
+        let queue_b = AuroraDesktopApp::music_queue_indices(&tracks, "", true);
+        assert_eq!(queue_a, queue_b);
+        assert_eq!(queue_a.len(), 3);
+    }
+
+    #[test]
+    fn step_music_track_idx_with_repeat_stops_at_edges_when_disabled() {
+        let queue = vec![4, 1, 3];
+        assert_eq!(
+            AuroraDesktopApp::step_music_track_idx_with_repeat(4, &queue, -1, false),
+            None
+        );
+        assert_eq!(
+            AuroraDesktopApp::step_music_track_idx_with_repeat(3, &queue, 1, false),
+            None
+        );
+        assert_eq!(
+            AuroraDesktopApp::step_music_track_idx_with_repeat(1, &queue, 1, false),
+            Some(3)
         );
     }
 

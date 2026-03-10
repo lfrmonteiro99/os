@@ -98,6 +98,8 @@ impl AppCatalog {
             ("Settings", "System"),
             ("Activity Monitor", "System"),
             ("Network Diagnostics", "System"),
+            ("Disk Utility", "Utilities"),
+            ("Font Book", "Productivity"),
             ("Dictionary", "Productivity"),
             ("Console", "Utilities"),
             ("Messages", "Communication"),
