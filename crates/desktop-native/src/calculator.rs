@@ -3,7 +3,13 @@ pub fn calc_eval(a: f64, op: char, b: f64) -> f64 {
         '+' => a + b,
         '-' => a - b,
         '*' => a * b,
-        '/' => if b != 0.0 { a / b } else { f64::NAN },
+        '/' => {
+            if b != 0.0 {
+                a / b
+            } else {
+                f64::NAN
+            }
+        }
         _ => b,
     }
 }
@@ -12,7 +18,10 @@ pub fn format_calc(val: f64) -> String {
     if val.fract() == 0.0 && val.abs() < 1e15 {
         format!("{}", val as i64)
     } else {
-        format!("{:.8}", val).trim_end_matches('0').trim_end_matches('.').to_string()
+        format!("{:.8}", val)
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
     }
 }
 

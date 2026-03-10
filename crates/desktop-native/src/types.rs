@@ -1,5 +1,5 @@
-use std::time::Duration;
 use eframe::egui::Color32;
+use std::time::Duration;
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -10,7 +10,46 @@ pub const DOCK_HEIGHT: f32 = 96.0;
 pub const DOCK_ICON_BASE: f32 = 48.0;
 pub const DOCK_ICON_MAX_SCALE: f32 = 1.35;
 pub const DOCK_EFFECT_DIST: f32 = 120.0;
-pub const WINDOW_COUNT: usize = 14;
+pub const WINDOW_COUNT: usize = 16;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppScreenState {
+    Setup,
+    Login,
+    Locked,
+    Desktop,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppPhase {
+    Booting,
+    Ready,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DockPosition {
+    Bottom,
+    Left,
+    Right,
+}
+
+impl DockPosition {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Bottom => "bottom",
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "left" => Self::Left,
+            "right" => Self::Right,
+            _ => Self::Bottom,
+        }
+    }
+}
 
 // ── Window types ─────────────────────────────────────────────────────────────
 
@@ -30,16 +69,29 @@ pub enum WindowKind {
     TextEditor = 11,
     Settings = 12,
     ProcessManager = 13,
+    Trash = 14,
+    NetworkDiagnostics = 15,
 }
 
 impl WindowKind {
     pub fn from_index(i: usize) -> Option<Self> {
         match i {
-            0 => Some(Self::Overview), 1 => Some(Self::Terminal), 2 => Some(Self::FileManager),
-            3 => Some(Self::Controls), 4 => Some(Self::Messages), 5 => Some(Self::Browser),
-            6 => Some(Self::Calculator), 7 => Some(Self::Notes), 8 => Some(Self::MusicPlayer),
-            9 => Some(Self::Photos), 10 => Some(Self::Calendar), 11 => Some(Self::TextEditor),
-            12 => Some(Self::Settings), 13 => Some(Self::ProcessManager),
+            0 => Some(Self::Overview),
+            1 => Some(Self::Terminal),
+            2 => Some(Self::FileManager),
+            3 => Some(Self::Controls),
+            4 => Some(Self::Messages),
+            5 => Some(Self::Browser),
+            6 => Some(Self::Calculator),
+            7 => Some(Self::Notes),
+            8 => Some(Self::MusicPlayer),
+            9 => Some(Self::Photos),
+            10 => Some(Self::Calendar),
+            11 => Some(Self::TextEditor),
+            12 => Some(Self::Settings),
+            13 => Some(Self::ProcessManager),
+            14 => Some(Self::Trash),
+            15 => Some(Self::NetworkDiagnostics),
             _ => None,
         }
     }
@@ -60,6 +112,8 @@ impl WindowKind {
             Self::TextEditor => "TextEdit",
             Self::Settings => "Settings",
             Self::ProcessManager => "Activity Monitor",
+            Self::Trash => "Trash",
+            Self::NetworkDiagnostics => "Network Diagnostics",
         }
     }
 }
@@ -84,15 +138,29 @@ pub enum DockIcon {
     Separator,
     Controls,
     Info,
+    Trash,
 }
 
 impl DockIcon {
     pub fn all() -> &'static [Self] {
         &[
-            Self::Files, Self::Terminal, Self::Browser, Self::Messages,
-            Self::Overview, Self::Launchpad, Self::Notes, Self::Calendar,
-            Self::Music, Self::Photos, Self::Calculator, Self::Settings,
-            Self::Store, Self::Separator, Self::Controls, Self::Info,
+            Self::Files,
+            Self::Terminal,
+            Self::Browser,
+            Self::Messages,
+            Self::Overview,
+            Self::Launchpad,
+            Self::Notes,
+            Self::Calendar,
+            Self::Music,
+            Self::Photos,
+            Self::Calculator,
+            Self::Settings,
+            Self::Store,
+            Self::Separator,
+            Self::Controls,
+            Self::Info,
+            Self::Trash,
         ]
     }
 
@@ -114,6 +182,7 @@ impl DockIcon {
             Self::Separator => "",
             Self::Controls => "Quick Controls",
             Self::Info => "System Info",
+            Self::Trash => "Trash",
         }
     }
 
@@ -135,6 +204,7 @@ impl DockIcon {
             Self::Separator => Color32::TRANSPARENT,
             Self::Controls => Color32::from_rgb(88, 86, 214),
             Self::Info => Color32::from_rgb(175, 82, 222),
+            Self::Trash => Color32::from_rgb(120, 120, 128),
         }
     }
 
@@ -153,6 +223,7 @@ impl DockIcon {
             Self::Calendar => Some(WindowKind::Calendar),
             Self::Settings => Some(WindowKind::Settings),
             Self::Info => Some(WindowKind::ProcessManager),
+            Self::Trash => Some(WindowKind::Trash),
             _ => None,
         }
     }
@@ -166,20 +237,67 @@ impl DockIcon {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuDropdown {
-    File, Edit, View, Window, Help,
+    File,
+    Edit,
+    View,
+    Window,
+    Help,
 }
 
 impl MenuDropdown {
     pub fn label(self) -> &'static str {
-        match self { Self::File => "File", Self::Edit => "Edit", Self::View => "View", Self::Window => "Window", Self::Help => "Help" }
+        match self {
+            Self::File => "File",
+            Self::Edit => "Edit",
+            Self::View => "View",
+            Self::Window => "Window",
+            Self::Help => "Help",
+        }
     }
 
     pub fn items(self) -> &'static [&'static str] {
         match self {
-            Self::File => &["New Window", "Open...", "Save", "---", "Close Window  Ctrl+W", "---", "Quit  Ctrl+Q"],
-            Self::Edit => &["Undo  Ctrl+Z", "Redo  Ctrl+Y", "---", "Cut  Ctrl+X", "Copy  Ctrl+C", "Paste  Ctrl+V", "---", "Select All  Ctrl+A"],
-            Self::View => &["Enter Full Screen", "---", "Show Sidebar", "Show Status Bar"],
-            Self::Window => &["Minimize  Ctrl+M", "Zoom", "---", "Tile Left", "Tile Right", "---", "Tile Left Third", "Tile Center Third", "Tile Right Third", "---", "Bring All to Front"],
+            Self::File => &[
+                "New Window",
+                "Open...",
+                "Save",
+                "---",
+                "Close Window  Ctrl+W",
+                "---",
+                "Quit  Ctrl+Q",
+            ],
+            Self::Edit => &[
+                "Undo  Ctrl+Z",
+                "Redo  Ctrl+Y",
+                "---",
+                "Cut  Ctrl+X",
+                "Copy  Ctrl+C",
+                "Paste  Ctrl+V",
+                "---",
+                "Select All  Ctrl+A",
+            ],
+            Self::View => &[
+                "Enter Full Screen",
+                "---",
+                "Show Sidebar",
+                "Show Path Bar",
+                "Show Status Bar",
+                "Show Preview",
+            ],
+            Self::Window => &[
+                "Minimize  Ctrl+M",
+                "Zoom",
+                "Start Screen Saver",
+                "---",
+                "Tile Left",
+                "Tile Right",
+                "---",
+                "Tile Left Third",
+                "Tile Center Third",
+                "Tile Right Third",
+                "---",
+                "Bring All to Front",
+            ],
             Self::Help => &["AuroraOS Help", "---", "About AuroraOS"],
         }
     }
@@ -204,9 +322,13 @@ pub enum MenuAction {
     Undo,
     Redo,
     Save,
+    StartScreenSaver,
     ToggleFullScreen,
+    ToggleSidebar,
+    TogglePathBar,
+    ToggleStatusBar,
+    TogglePreview,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -225,16 +347,49 @@ mod tests {
         assert!(SYSINFO_INTERVAL.as_secs() > 0);
     }
 
+    #[test]
+    fn dock_position_string_roundtrip() {
+        assert_eq!(DockPosition::from_str("bottom"), DockPosition::Bottom);
+        assert_eq!(DockPosition::from_str("left"), DockPosition::Left);
+        assert_eq!(DockPosition::from_str("right"), DockPosition::Right);
+        assert_eq!(DockPosition::Right.as_str(), "right");
+    }
+
+    #[test]
+    fn app_screen_state_variants_exist() {
+        assert!(matches!(AppScreenState::Setup, AppScreenState::Setup));
+        assert!(matches!(AppScreenState::Login, AppScreenState::Login));
+        assert!(matches!(AppScreenState::Locked, AppScreenState::Locked));
+        assert!(matches!(AppScreenState::Desktop, AppScreenState::Desktop));
+    }
+
+    #[test]
+    fn app_phase_variants_exist() {
+        assert!(matches!(AppPhase::Booting, AppPhase::Booting));
+        assert!(matches!(AppPhase::Ready, AppPhase::Ready));
+    }
+
     // ── WindowKind ───────────────────────────────────────────────────
 
     #[test]
     fn window_kind_titles_nonempty() {
         let kinds = [
-            WindowKind::Overview, WindowKind::Terminal, WindowKind::FileManager,
-            WindowKind::Controls, WindowKind::Messages, WindowKind::Browser,
-            WindowKind::Calculator, WindowKind::Notes, WindowKind::MusicPlayer,
-            WindowKind::Photos, WindowKind::Calendar, WindowKind::TextEditor,
-            WindowKind::Settings, WindowKind::ProcessManager,
+            WindowKind::Overview,
+            WindowKind::Terminal,
+            WindowKind::FileManager,
+            WindowKind::Controls,
+            WindowKind::Messages,
+            WindowKind::Browser,
+            WindowKind::Calculator,
+            WindowKind::Notes,
+            WindowKind::MusicPlayer,
+            WindowKind::Photos,
+            WindowKind::Calendar,
+            WindowKind::TextEditor,
+            WindowKind::Settings,
+            WindowKind::ProcessManager,
+            WindowKind::Trash,
+            WindowKind::NetworkDiagnostics,
         ];
         for kind in kinds {
             assert!(!kind.title().is_empty(), "{kind:?} has empty title");
@@ -243,8 +398,8 @@ mod tests {
 
     #[test]
     fn window_count_matches_enum() {
-        assert_eq!(WINDOW_COUNT, 14);
-        assert_eq!(WindowKind::ProcessManager as usize, WINDOW_COUNT - 1);
+        assert_eq!(WINDOW_COUNT, 16);
+        assert_eq!(WindowKind::NetworkDiagnostics as usize, WINDOW_COUNT - 1);
     }
 
     #[test]
@@ -254,6 +409,8 @@ mod tests {
         assert_eq!(WindowKind::TextEditor as usize, 11);
         assert_eq!(WindowKind::Settings as usize, 12);
         assert_eq!(WindowKind::ProcessManager as usize, 13);
+        assert_eq!(WindowKind::Trash as usize, 14);
+        assert_eq!(WindowKind::NetworkDiagnostics as usize, 15);
     }
 
     #[test]
@@ -267,7 +424,7 @@ mod tests {
 
     #[test]
     fn from_index_out_of_bounds() {
-        assert!(WindowKind::from_index(14).is_none());
+        assert!(WindowKind::from_index(16).is_none());
         assert!(WindowKind::from_index(999).is_none());
     }
 
@@ -300,7 +457,8 @@ mod tests {
 
     #[test]
     fn dock_icon_bg_colors_not_all_same() {
-        let colors: Vec<_> = DockIcon::all().iter()
+        let colors: Vec<_> = DockIcon::all()
+            .iter()
             .filter(|i| !i.is_separator())
             .map(|i| i.bg_color())
             .collect();
@@ -314,7 +472,13 @@ mod tests {
 
     #[test]
     fn menu_dropdown_labels_nonempty() {
-        let menus = [MenuDropdown::File, MenuDropdown::Edit, MenuDropdown::View, MenuDropdown::Window, MenuDropdown::Help];
+        let menus = [
+            MenuDropdown::File,
+            MenuDropdown::Edit,
+            MenuDropdown::View,
+            MenuDropdown::Window,
+            MenuDropdown::Help,
+        ];
         for m in menus {
             assert!(!m.label().is_empty());
         }
@@ -322,7 +486,13 @@ mod tests {
 
     #[test]
     fn menu_dropdown_items_nonempty() {
-        let menus = [MenuDropdown::File, MenuDropdown::Edit, MenuDropdown::View, MenuDropdown::Window, MenuDropdown::Help];
+        let menus = [
+            MenuDropdown::File,
+            MenuDropdown::Edit,
+            MenuDropdown::View,
+            MenuDropdown::Window,
+            MenuDropdown::Help,
+        ];
         for m in menus {
             assert!(!m.items().is_empty(), "{m:?} has no items");
         }
@@ -330,12 +500,25 @@ mod tests {
 
     #[test]
     fn menu_file_has_quit() {
-        assert!(MenuDropdown::File.items().iter().any(|i| i.contains("Quit")));
+        assert!(MenuDropdown::File
+            .items()
+            .iter()
+            .any(|i| i.contains("Quit")));
     }
 
     #[test]
     fn menu_window_has_minimize() {
-        assert!(MenuDropdown::Window.items().iter().any(|i| i.contains("Minimize")));
+        assert!(MenuDropdown::Window
+            .items()
+            .iter()
+            .any(|i| i.contains("Minimize")));
     }
 
+    #[test]
+    fn menu_window_has_start_screen_saver() {
+        assert!(MenuDropdown::Window
+            .items()
+            .iter()
+            .any(|i| i.contains("Start Screen Saver")));
+    }
 }

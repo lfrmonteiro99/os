@@ -11,11 +11,9 @@ mod platform {
 
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowLongW, GetWindowThreadProcessId, IsWindowVisible,
-        MoveWindow, SetParent, SetWindowLongW, ShowWindow,
-        GWL_EXSTYLE, GWL_STYLE, SW_SHOW,
-        WS_CAPTION, WS_CHILD, WS_POPUP, WS_THICKFRAME,
-        WS_EX_APPWINDOW, WS_EX_WINDOWEDGE,
+        EnumWindows, GetWindowLongW, GetWindowThreadProcessId, IsWindowVisible, MoveWindow,
+        SetParent, SetWindowLongW, ShowWindow, GWL_EXSTYLE, GWL_STYLE, SW_SHOW, WS_CAPTION,
+        WS_CHILD, WS_EX_APPWINDOW, WS_EX_WINDOWEDGE, WS_POPUP, WS_THICKFRAME,
     };
 
     /// State for a single embedded application
@@ -74,7 +72,9 @@ mod platform {
         }
 
         pub fn reparent(&mut self, parent: HWND) {
-            if self.reparented { return; }
+            if self.reparented {
+                return;
+            }
             let Some(child) = self.hwnd else { return };
             self.parent_hwnd = Some(parent);
 
@@ -96,10 +96,16 @@ mod platform {
 
         pub fn position(&mut self, x: i32, y: i32, w: i32, h: i32) {
             let Some(child) = self.hwnd else { return };
-            if w <= 0 || h <= 0 { return; }
+            if w <= 0 || h <= 0 {
+                return;
+            }
             let rect = (x, y, w, h);
-            if self.last_rect == Some(rect) { return; }
-            unsafe { MoveWindow(child, x, y, w, h, 1); }
+            if self.last_rect == Some(rect) {
+                return;
+            }
+            unsafe {
+                MoveWindow(child, x, y, w, h, 1);
+            }
             self.last_rect = Some(rect);
         }
 
@@ -122,7 +128,9 @@ mod platform {
             let _ = self.process.kill();
         }
 
-        pub fn is_reparented(&self) -> bool { self.reparented }
+        pub fn is_reparented(&self) -> bool {
+            self.reparented
+        }
 
         pub fn gave_up(&self) -> bool {
             self.hwnd.is_none() && self.hwnd_search_attempts > 50
@@ -130,11 +138,16 @@ mod platform {
     }
 
     impl Drop for EmbeddedApp {
-        fn drop(&mut self) { self.kill(); }
+        fn drop(&mut self) {
+            self.kill();
+        }
     }
 
     fn find_hwnd_by_pid(target_pid: u32) -> Option<HWND> {
-        struct Ctx { target_pid: u32, result: Option<HWND> }
+        struct Ctx {
+            target_pid: u32,
+            result: Option<HWND>,
+        }
 
         unsafe extern "system" fn cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
             let ctx = &mut *(lparam as *mut Ctx);
@@ -147,8 +160,13 @@ mod platform {
             1
         }
 
-        let mut ctx = Ctx { target_pid, result: None };
-        unsafe { EnumWindows(Some(cb), &mut ctx as *mut Ctx as LPARAM); }
+        let mut ctx = Ctx {
+            target_pid,
+            result: None,
+        };
+        unsafe {
+            EnumWindows(Some(cb), &mut ctx as *mut Ctx as LPARAM);
+        }
         ctx.result
     }
 
@@ -157,13 +175,19 @@ mod platform {
     pub fn list_visible_windows() -> Vec<(HWND, u32, String)> {
         use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowTextLengthW, GetWindowTextW};
 
-        struct ListCtx { windows: Vec<(HWND, u32, String)> }
+        struct ListCtx {
+            windows: Vec<(HWND, u32, String)>,
+        }
 
         unsafe extern "system" fn cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
             let ctx = &mut *(lparam as *mut ListCtx);
-            if IsWindowVisible(hwnd) == 0 { return 1; }
+            if IsWindowVisible(hwnd) == 0 {
+                return 1;
+            }
             let len = GetWindowTextLengthW(hwnd);
-            if len <= 0 { return 1; }
+            if len <= 0 {
+                return 1;
+            }
             let mut buf = vec![0u16; (len + 1) as usize];
             let actual = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
             if actual > 0 {
@@ -177,8 +201,12 @@ mod platform {
             1
         }
 
-        let mut ctx = ListCtx { windows: Vec::new() };
-        unsafe { EnumWindows(Some(cb), &mut ctx as *mut ListCtx as LPARAM); }
+        let mut ctx = ListCtx {
+            windows: Vec::new(),
+        };
+        unsafe {
+            EnumWindows(Some(cb), &mut ctx as *mut ListCtx as LPARAM);
+        }
         ctx.windows
     }
 
@@ -186,16 +214,25 @@ mod platform {
     pub fn find_own_hwnd() -> Option<HWND> {
         let our_pid = std::process::id();
         // list_visible_windows excludes "AuroraOS", so we do a direct enumeration
-        struct Ctx { pid: u32, result: Option<HWND> }
+        struct Ctx {
+            pid: u32,
+            result: Option<HWND>,
+        }
 
         unsafe extern "system" fn cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
-            use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowTextLengthW, GetWindowTextW};
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                GetWindowTextLengthW, GetWindowTextW,
+            };
             let ctx = &mut *(lparam as *mut Ctx);
             let mut pid: u32 = 0;
             GetWindowThreadProcessId(hwnd, &mut pid);
-            if pid != ctx.pid || IsWindowVisible(hwnd) == 0 { return 1; }
+            if pid != ctx.pid || IsWindowVisible(hwnd) == 0 {
+                return 1;
+            }
             let len = GetWindowTextLengthW(hwnd);
-            if len <= 0 { return 1; }
+            if len <= 0 {
+                return 1;
+            }
             let mut buf = vec![0u16; (len + 1) as usize];
             let actual = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
             if actual > 0 {
@@ -208,8 +245,13 @@ mod platform {
             1
         }
 
-        let mut ctx = Ctx { pid: our_pid, result: None };
-        unsafe { EnumWindows(Some(cb), &mut ctx as *mut Ctx as LPARAM); }
+        let mut ctx = Ctx {
+            pid: our_pid,
+            result: None,
+        };
+        unsafe {
+            EnumWindows(Some(cb), &mut ctx as *mut Ctx as LPARAM);
+        }
         ctx.result
     }
 
@@ -232,22 +274,34 @@ impl EmbeddedApp {
     pub fn launch(_label: &str, _program: &str, _args: &[&str]) -> Result<Self, String> {
         Err("Embedded apps are only supported on Windows".to_string())
     }
-    pub fn is_alive(&mut self) -> bool { false }
-    pub fn try_find_hwnd(&mut self) -> bool { false }
+    pub fn is_alive(&mut self) -> bool {
+        false
+    }
+    pub fn try_find_hwnd(&mut self) -> bool {
+        false
+    }
     #[allow(dead_code)]
     pub fn reparent(&mut self, _parent: isize) {}
     pub fn position(&mut self, _x: i32, _y: i32, _w: i32, _h: i32) {}
     pub fn detach(&mut self) {}
     pub fn kill(&mut self) {}
-    pub fn is_reparented(&self) -> bool { false }
-    pub fn gave_up(&self) -> bool { true }
+    pub fn is_reparented(&self) -> bool {
+        false
+    }
+    pub fn gave_up(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(not(windows))]
-pub fn list_visible_windows() -> Vec<(isize, u32, String)> { Vec::new() }
+pub fn list_visible_windows() -> Vec<(isize, u32, String)> {
+    Vec::new()
+}
 
 #[cfg(not(windows))]
-pub fn find_own_hwnd() -> Option<isize> { None }
+pub fn find_own_hwnd() -> Option<isize> {
+    None
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tests
@@ -279,7 +333,10 @@ mod tests {
     #[test]
     fn list_visible_windows_returns_some() {
         let windows = list_visible_windows();
-        assert!(!windows.is_empty(), "Should find at least one visible window");
+        assert!(
+            !windows.is_empty(),
+            "Should find at least one visible window"
+        );
     }
 
     #[cfg(windows)]
@@ -292,7 +349,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn gave_up_after_max_attempts() {
-        let mut app = EmbeddedApp::launch("test", "cmd.exe", &["/C", "timeout", "/t", "10"]).unwrap();
+        let mut app =
+            EmbeddedApp::launch("test", "cmd.exe", &["/C", "timeout", "/t", "10"]).unwrap();
         app.hwnd_search_attempts = 51;
         assert!(app.gave_up());
         app.kill();

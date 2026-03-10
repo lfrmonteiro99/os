@@ -8,7 +8,9 @@ pub struct AppClipboard {
 
 impl AppClipboard {
     pub fn new() -> Self {
-        Self { content: Arc::new(Mutex::new(String::new())) }
+        Self {
+            content: Arc::new(Mutex::new(String::new())),
+        }
     }
 
     pub fn copy(&self, text: &str) {

@@ -34,7 +34,9 @@ impl AutoSave {
     }
 
     pub fn should_save(&self) -> bool {
-        if !self.dirty { return false; }
+        if !self.dirty {
+            return false;
+        }
         match self.last_save {
             Some(t) => t.elapsed() >= self.interval,
             None => true,

@@ -7,8 +7,13 @@ use eframe::egui::Color32;
 #[derive(Clone, Debug)]
 pub enum BrowserPage {
     Favorites,
-    MockSite { title: String, sections: Vec<PageSection> },
-    NotFound { url: String },
+    MockSite {
+        title: String,
+        sections: Vec<PageSection>,
+    },
+    NotFound {
+        url: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -133,30 +138,86 @@ fn resolve_page(url: &str) -> BrowserPage {
         "google.com" | "www.google.com" => BrowserPage::MockSite {
             title: "Google".to_string(),
             sections: vec![
-                PageSection { kind: SectionKind::Heading, text: "Google".to_string() },
-                PageSection { kind: SectionKind::SearchBar, text: String::new() },
-                PageSection { kind: SectionKind::Paragraph, text: "Search the world's information".to_string() },
+                PageSection {
+                    kind: SectionKind::Heading,
+                    text: "Google".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::SearchBar,
+                    text: String::new(),
+                },
+                PageSection {
+                    kind: SectionKind::Paragraph,
+                    text: "Search the world's information".to_string(),
+                },
             ],
         },
         "github.com" | "www.github.com" => BrowserPage::MockSite {
             title: "GitHub".to_string(),
             sections: vec![
-                PageSection { kind: SectionKind::Image { color: Color32::from_rgb(36, 41, 46), height: 50.0 }, text: "GitHub - Where the world builds software".to_string() },
-                PageSection { kind: SectionKind::Heading, text: "Popular repositories".to_string() },
-                PageSection { kind: SectionKind::Link { url: "https://github.com/AuroraOS".to_string() }, text: "AuroraOS/desktop - macOS-like desktop in Rust".to_string() },
-                PageSection { kind: SectionKind::Link { url: "https://github.com/AuroraOS".to_string() }, text: "AuroraOS/kernel - Microkernel foundation".to_string() },
-                PageSection { kind: SectionKind::CodeBlock, text: "cargo build --release\ncargo run -p desktop-native".to_string() },
+                PageSection {
+                    kind: SectionKind::Image {
+                        color: Color32::from_rgb(36, 41, 46),
+                        height: 50.0,
+                    },
+                    text: "GitHub - Where the world builds software".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Heading,
+                    text: "Popular repositories".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Link {
+                        url: "https://github.com/AuroraOS".to_string(),
+                    },
+                    text: "AuroraOS/desktop - macOS-like desktop in Rust".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Link {
+                        url: "https://github.com/AuroraOS".to_string(),
+                    },
+                    text: "AuroraOS/kernel - Microkernel foundation".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::CodeBlock,
+                    text: "cargo build --release\ncargo run -p desktop-native".to_string(),
+                },
             ],
         },
         "reddit.com" | "www.reddit.com" => BrowserPage::MockSite {
             title: "Reddit".to_string(),
             sections: vec![
-                PageSection { kind: SectionKind::Image { color: Color32::from_rgb(255, 69, 0), height: 40.0 }, text: "reddit".to_string() },
-                PageSection { kind: SectionKind::Heading, text: "r/programming".to_string() },
-                PageSection { kind: SectionKind::Link { url: "#".to_string() }, text: "Show HN: AuroraOS - A desktop OS written in Rust".to_string() },
-                PageSection { kind: SectionKind::Paragraph, text: "1.2k upvotes - 342 comments".to_string() },
-                PageSection { kind: SectionKind::Link { url: "#".to_string() }, text: "Why Rust is the future of systems programming".to_string() },
-                PageSection { kind: SectionKind::Paragraph, text: "856 upvotes - 198 comments".to_string() },
+                PageSection {
+                    kind: SectionKind::Image {
+                        color: Color32::from_rgb(255, 69, 0),
+                        height: 40.0,
+                    },
+                    text: "reddit".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Heading,
+                    text: "r/programming".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Link {
+                        url: "#".to_string(),
+                    },
+                    text: "Show HN: AuroraOS - A desktop OS written in Rust".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Paragraph,
+                    text: "1.2k upvotes - 342 comments".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Link {
+                        url: "#".to_string(),
+                    },
+                    text: "Why Rust is the future of systems programming".to_string(),
+                },
+                PageSection {
+                    kind: SectionKind::Paragraph,
+                    text: "856 upvotes - 198 comments".to_string(),
+                },
             ],
         },
         d if d.contains("search.auroraos") => {
@@ -164,29 +225,93 @@ fn resolve_page(url: &str) -> BrowserPage {
             BrowserPage::MockSite {
                 title: format!("Search: {}", query),
                 sections: vec![
-                    PageSection { kind: SectionKind::SearchBar, text: query.clone() },
-                    PageSection { kind: SectionKind::Heading, text: format!("Results for \"{}\"", query) },
-                    PageSection { kind: SectionKind::Link { url: "#".to_string() }, text: format!("{} - Wikipedia", query) },
-                    PageSection { kind: SectionKind::Paragraph, text: "The free encyclopedia article about this topic...".to_string() },
-                    PageSection { kind: SectionKind::Link { url: "#".to_string() }, text: format!("{} documentation", query) },
-                    PageSection { kind: SectionKind::Paragraph, text: "Official documentation and reference guide.".to_string() },
+                    PageSection {
+                        kind: SectionKind::SearchBar,
+                        text: query.clone(),
+                    },
+                    PageSection {
+                        kind: SectionKind::Heading,
+                        text: format!("Results for \"{}\"", query),
+                    },
+                    PageSection {
+                        kind: SectionKind::Link {
+                            url: "#".to_string(),
+                        },
+                        text: format!("{} - Wikipedia", query),
+                    },
+                    PageSection {
+                        kind: SectionKind::Paragraph,
+                        text: "The free encyclopedia article about this topic...".to_string(),
+                    },
+                    PageSection {
+                        kind: SectionKind::Link {
+                            url: "#".to_string(),
+                        },
+                        text: format!("{} documentation", query),
+                    },
+                    PageSection {
+                        kind: SectionKind::Paragraph,
+                        text: "Official documentation and reference guide.".to_string(),
+                    },
                 ],
             }
         }
-        _ => BrowserPage::NotFound { url: url.to_string() },
+        _ => BrowserPage::NotFound {
+            url: url.to_string(),
+        },
     }
 }
 
 fn default_bookmarks() -> Vec<Bookmark> {
     vec![
-        Bookmark { name: "Apple".into(), url: "https://apple.com".into(), color: Color32::from_rgb(142, 142, 147), abbrev: "A".into() },
-        Bookmark { name: "Google".into(), url: "https://google.com".into(), color: Color32::from_rgb(66, 133, 244), abbrev: "G".into() },
-        Bookmark { name: "GitHub".into(), url: "https://github.com".into(), color: Color32::from_rgb(36, 41, 46), abbrev: "GH".into() },
-        Bookmark { name: "Reddit".into(), url: "https://reddit.com".into(), color: Color32::from_rgb(255, 69, 0), abbrev: "R".into() },
-        Bookmark { name: "Netflix".into(), url: "https://netflix.com".into(), color: Color32::from_rgb(229, 9, 20), abbrev: "N".into() },
-        Bookmark { name: "Rust".into(), url: "https://rust-lang.org".into(), color: Color32::from_rgb(222, 165, 88), abbrev: "Rs".into() },
-        Bookmark { name: "Twitter".into(), url: "https://twitter.com".into(), color: Color32::from_rgb(29, 161, 242), abbrev: "T".into() },
-        Bookmark { name: "LinkedIn".into(), url: "https://linkedin.com".into(), color: Color32::from_rgb(0, 119, 181), abbrev: "Li".into() },
+        Bookmark {
+            name: "Apple".into(),
+            url: "https://apple.com".into(),
+            color: Color32::from_rgb(142, 142, 147),
+            abbrev: "A".into(),
+        },
+        Bookmark {
+            name: "Google".into(),
+            url: "https://google.com".into(),
+            color: Color32::from_rgb(66, 133, 244),
+            abbrev: "G".into(),
+        },
+        Bookmark {
+            name: "GitHub".into(),
+            url: "https://github.com".into(),
+            color: Color32::from_rgb(36, 41, 46),
+            abbrev: "GH".into(),
+        },
+        Bookmark {
+            name: "Reddit".into(),
+            url: "https://reddit.com".into(),
+            color: Color32::from_rgb(255, 69, 0),
+            abbrev: "R".into(),
+        },
+        Bookmark {
+            name: "Netflix".into(),
+            url: "https://netflix.com".into(),
+            color: Color32::from_rgb(229, 9, 20),
+            abbrev: "N".into(),
+        },
+        Bookmark {
+            name: "Rust".into(),
+            url: "https://rust-lang.org".into(),
+            color: Color32::from_rgb(222, 165, 88),
+            abbrev: "Rs".into(),
+        },
+        Bookmark {
+            name: "Twitter".into(),
+            url: "https://twitter.com".into(),
+            color: Color32::from_rgb(29, 161, 242),
+            abbrev: "T".into(),
+        },
+        Bookmark {
+            name: "LinkedIn".into(),
+            url: "https://linkedin.com".into(),
+            color: Color32::from_rgb(0, 119, 181),
+            abbrev: "Li".into(),
+        },
     ]
 }
 
@@ -219,7 +344,10 @@ mod tests {
     fn navigate_to_github() {
         let mut b = BrowserState::new();
         b.navigate("github.com");
-        if let BrowserPage::MockSite { title, sections, .. } = &b.page {
+        if let BrowserPage::MockSite {
+            title, sections, ..
+        } = &b.page
+        {
             assert_eq!(title, "GitHub");
             assert!(sections.len() >= 3);
         } else {

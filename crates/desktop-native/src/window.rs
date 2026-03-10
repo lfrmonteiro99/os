@@ -1,5 +1,5 @@
-use std::time::Instant;
 use eframe::egui::{Pos2, Rect, Vec2};
+use std::time::Instant;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SnapSide {
@@ -42,17 +42,31 @@ pub struct ManagedWindow {
 impl ManagedWindow {
     pub fn new(default_pos: Pos2, default_size: Vec2) -> Self {
         Self {
-            open: true, minimized: false, maximized: false, snap: None,
-            default_pos, default_size, restore_rect: None, id_epoch: 0,
-            open_anim_start: None, closing: false, close_anim_start: None,
-            minimizing: false, minimize_anim_start: None, desktop: 0,
+            open: true,
+            minimized: false,
+            maximized: false,
+            snap: None,
+            default_pos,
+            default_size,
+            restore_rect: None,
+            id_epoch: 0,
+            open_anim_start: None,
+            closing: false,
+            close_anim_start: None,
+            minimizing: false,
+            minimize_anim_start: None,
+            desktop: 0,
         }
     }
 
     pub fn snapshot(&self) -> WindowSnapshot {
         WindowSnapshot {
-            open: self.open, minimized: self.minimized, maximized: self.maximized,
-            snap: self.snap, default_pos: self.default_pos, default_size: self.default_size,
+            open: self.open,
+            minimized: self.minimized,
+            maximized: self.maximized,
+            snap: self.snap,
+            default_pos: self.default_pos,
+            default_size: self.default_size,
             id_epoch: self.id_epoch,
         }
     }
@@ -137,11 +151,13 @@ impl ManagedWindow {
     }
 
     pub fn is_close_anim_done(&self) -> bool {
-        self.close_anim_start.map_or(false, |t| t.elapsed().as_secs_f32() > 0.15)
+        self.close_anim_start
+            .map_or(false, |t| t.elapsed().as_secs_f32() > 0.15)
     }
 
     pub fn is_minimize_anim_done(&self) -> bool {
-        self.minimize_anim_start.map_or(false, |t| t.elapsed().as_secs_f32() > 0.25)
+        self.minimize_anim_start
+            .map_or(false, |t| t.elapsed().as_secs_f32() > 0.25)
     }
 }
 
@@ -154,10 +170,16 @@ pub fn snap_rect(work_rect: Rect, side: SnapSide) -> Rect {
     let left = work_rect.left();
     match side {
         SnapSide::Left => Rect::from_min_size(work_rect.left_top(), Vec2::new(w * 0.5, h)),
-        SnapSide::Right => Rect::from_min_size(Pos2::new(left + w * 0.5, top), Vec2::new(w * 0.5, h)),
+        SnapSide::Right => {
+            Rect::from_min_size(Pos2::new(left + w * 0.5, top), Vec2::new(w * 0.5, h))
+        }
         SnapSide::LeftThird => Rect::from_min_size(work_rect.left_top(), Vec2::new(w / 3.0, h)),
-        SnapSide::CenterThird => Rect::from_min_size(Pos2::new(left + w / 3.0, top), Vec2::new(w / 3.0, h)),
-        SnapSide::RightThird => Rect::from_min_size(Pos2::new(left + w * 2.0 / 3.0, top), Vec2::new(w / 3.0, h)),
+        SnapSide::CenterThird => {
+            Rect::from_min_size(Pos2::new(left + w / 3.0, top), Vec2::new(w / 3.0, h))
+        }
+        SnapSide::RightThird => {
+            Rect::from_min_size(Pos2::new(left + w * 2.0 / 3.0, top), Vec2::new(w / 3.0, h))
+        }
     }
 }
 
@@ -389,7 +411,11 @@ mod tests {
         let c = snap_rect(work, SnapSide::CenterThird);
         let r = snap_rect(work, SnapSide::RightThird);
         let total = l.width() + c.width() + r.width();
-        assert!((total - 900.0).abs() < 0.1, "Thirds should cover full width, got {}", total);
+        assert!(
+            (total - 900.0).abs() < 0.1,
+            "Thirds should cover full width, got {}",
+            total
+        );
     }
 
     #[test]

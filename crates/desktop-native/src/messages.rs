@@ -1,7 +1,7 @@
 //! Messages window state — conversations, chat bubbles, auto-reply.
 
-use std::time::{Duration, Instant};
 use eframe::egui::Color32;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub struct ChatMessage {
@@ -44,13 +44,41 @@ impl MessagesState {
                 contact_name: "Alice".to_string(),
                 contact_color: Color32::from_rgb(0, 122, 255),
                 messages: vec![
-                    ChatMessage { text: "Hey! How's the AuroraOS project going?".into(), is_sent: false, timestamp: now - Duration::from_secs(300) },
-                    ChatMessage { text: "Going great! Just finished the desktop shell".into(), is_sent: true, timestamp: now - Duration::from_secs(240) },
-                    ChatMessage { text: "The Big Sur wallpaper looks amazing".into(), is_sent: false, timestamp: now - Duration::from_secs(180) },
-                    ChatMessage { text: "Thanks! The dock magnification was tricky".into(), is_sent: true, timestamp: now - Duration::from_secs(120) },
-                    ChatMessage { text: "Can you show me a screenshot?".into(), is_sent: false, timestamp: now - Duration::from_secs(60) },
-                    ChatMessage { text: "Sure, sending one now...".into(), is_sent: true, timestamp: now - Duration::from_secs(30) },
-                    ChatMessage { text: "Hey! The new UI looks amazing".into(), is_sent: false, timestamp: now },
+                    ChatMessage {
+                        text: "Hey! How's the AuroraOS project going?".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(300),
+                    },
+                    ChatMessage {
+                        text: "Going great! Just finished the desktop shell".into(),
+                        is_sent: true,
+                        timestamp: now - Duration::from_secs(240),
+                    },
+                    ChatMessage {
+                        text: "The Big Sur wallpaper looks amazing".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(180),
+                    },
+                    ChatMessage {
+                        text: "Thanks! The dock magnification was tricky".into(),
+                        is_sent: true,
+                        timestamp: now - Duration::from_secs(120),
+                    },
+                    ChatMessage {
+                        text: "Can you show me a screenshot?".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(60),
+                    },
+                    ChatMessage {
+                        text: "Sure, sending one now...".into(),
+                        is_sent: true,
+                        timestamp: now - Duration::from_secs(30),
+                    },
+                    ChatMessage {
+                        text: "Hey! The new UI looks amazing".into(),
+                        is_sent: false,
+                        timestamp: now,
+                    },
                 ],
                 unread: 1,
             },
@@ -58,9 +86,21 @@ impl MessagesState {
                 contact_name: "Bob".to_string(),
                 contact_color: Color32::from_rgb(52, 199, 89),
                 messages: vec![
-                    ChatMessage { text: "Did you push the latest changes?".into(), is_sent: false, timestamp: now - Duration::from_secs(600) },
-                    ChatMessage { text: "Yes, just merged the PR".into(), is_sent: true, timestamp: now - Duration::from_secs(500) },
-                    ChatMessage { text: "Sure, sounds good".into(), is_sent: false, timestamp: now - Duration::from_secs(400) },
+                    ChatMessage {
+                        text: "Did you push the latest changes?".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(600),
+                    },
+                    ChatMessage {
+                        text: "Yes, just merged the PR".into(),
+                        is_sent: true,
+                        timestamp: now - Duration::from_secs(500),
+                    },
+                    ChatMessage {
+                        text: "Sure, sounds good".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(400),
+                    },
                 ],
                 unread: 0,
             },
@@ -68,9 +108,21 @@ impl MessagesState {
                 contact_name: "Team".to_string(),
                 contact_color: Color32::from_rgb(255, 149, 0),
                 messages: vec![
-                    ChatMessage { text: "Sprint review at 3pm".into(), is_sent: false, timestamp: now - Duration::from_secs(3600) },
-                    ChatMessage { text: "Build passed!".into(), is_sent: false, timestamp: now - Duration::from_secs(1800) },
-                    ChatMessage { text: "Great work everyone".into(), is_sent: true, timestamp: now - Duration::from_secs(900) },
+                    ChatMessage {
+                        text: "Sprint review at 3pm".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(3600),
+                    },
+                    ChatMessage {
+                        text: "Build passed!".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(1800),
+                    },
+                    ChatMessage {
+                        text: "Great work everyone".into(),
+                        is_sent: true,
+                        timestamp: now - Duration::from_secs(900),
+                    },
                 ],
                 unread: 0,
             },
@@ -78,9 +130,21 @@ impl MessagesState {
                 contact_name: "Carol".to_string(),
                 contact_color: Color32::from_rgb(175, 82, 222),
                 messages: vec![
-                    ChatMessage { text: "Are you coming to the meetup?".into(), is_sent: false, timestamp: now - Duration::from_secs(7200) },
-                    ChatMessage { text: "Definitely! See you there".into(), is_sent: true, timestamp: now - Duration::from_secs(7000) },
-                    ChatMessage { text: "See you tomorrow".into(), is_sent: false, timestamp: now - Duration::from_secs(3600) },
+                    ChatMessage {
+                        text: "Are you coming to the meetup?".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(7200),
+                    },
+                    ChatMessage {
+                        text: "Definitely! See you there".into(),
+                        is_sent: true,
+                        timestamp: now - Duration::from_secs(7000),
+                    },
+                    ChatMessage {
+                        text: "See you tomorrow".into(),
+                        is_sent: false,
+                        timestamp: now - Duration::from_secs(3600),
+                    },
                 ],
                 unread: 0,
             },
@@ -89,10 +153,14 @@ impl MessagesState {
 
     pub fn send_message(&mut self) {
         let text = self.input_text.trim().to_string();
-        if text.is_empty() { return; }
+        if text.is_empty() {
+            return;
+        }
 
         let idx = self.active;
-        if idx >= self.conversations.len() { return; }
+        if idx >= self.conversations.len() {
+            return;
+        }
 
         self.conversations[idx].messages.push(ChatMessage {
             text,
@@ -111,8 +179,10 @@ impl MessagesState {
         if let Some((conv_idx, deliver_at)) = self.pending_reply {
             if Instant::now() >= deliver_at {
                 if conv_idx < self.conversations.len() {
-                    let reply = auto_reply_for(&self.conversations[conv_idx].contact_name,
-                        self.conversations[conv_idx].messages.len());
+                    let reply = auto_reply_for(
+                        &self.conversations[conv_idx].contact_name,
+                        self.conversations[conv_idx].messages.len(),
+                    );
                     self.conversations[conv_idx].messages.push(ChatMessage {
                         text: reply,
                         is_sent: false,
@@ -146,19 +216,35 @@ impl MessagesState {
 fn auto_reply_for(contact: &str, msg_count: usize) -> String {
     let replies = match contact {
         "Alice" => &[
-            "That's awesome!", "Keep up the great work!", "I love the new features!",
-            "Can't wait to try it", "Send me the build!", "Looking good!",
+            "That's awesome!",
+            "Keep up the great work!",
+            "I love the new features!",
+            "Can't wait to try it",
+            "Send me the build!",
+            "Looking good!",
         ][..],
         "Bob" => &[
-            "Nice!", "LGTM", "Sounds good", "On it", "Will review later",
-            "Merged!", "Thanks for the update",
+            "Nice!",
+            "LGTM",
+            "Sounds good",
+            "On it",
+            "Will review later",
+            "Merged!",
+            "Thanks for the update",
         ],
         "Team" => &[
-            "Noted", "Thanks for the update", "Will do", "Good progress!",
-            "Let's sync up later", "Action items updated",
+            "Noted",
+            "Thanks for the update",
+            "Will do",
+            "Good progress!",
+            "Let's sync up later",
+            "Action items updated",
         ],
         "Carol" => &[
-            "Sounds great!", "See you there!", "Can't wait", "Perfect",
+            "Sounds great!",
+            "See you there!",
+            "Can't wait",
+            "Perfect",
             "Let me know if anything changes",
         ],
         _ => &["Ok", "Got it", "Thanks", "Sure"],

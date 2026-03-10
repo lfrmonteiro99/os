@@ -299,8 +299,11 @@ mod tests {
         let denied = control.handle_frame(CommandFrame::new(4, "status"));
         assert_eq!(denied.payload, "unauthorized: invalid auth token");
 
-        let allowed =
-            control.handle_frame(CommandFrame::with_auth(5, Some("secret".to_string()), "status"));
+        let allowed = control.handle_frame(CommandFrame::with_auth(
+            5,
+            Some("secret".to_string()),
+            "status",
+        ));
         assert!(allowed.payload.contains("logging:"));
     }
 
@@ -358,7 +361,11 @@ mod tests {
         let manager = ServiceManager::default();
         let mut control = ControlPlane::new(manager, Duration::from_millis(1), None);
         let response = control.handle_frame(CommandFrame::new(1, "start ghost"));
-        assert!(response.payload.contains("error") || response.payload.contains("not found") || response.payload.contains("Error"));
+        assert!(
+            response.payload.contains("error")
+                || response.payload.contains("not found")
+                || response.payload.contains("Error")
+        );
     }
 
     #[test]
@@ -366,7 +373,11 @@ mod tests {
         let manager = ServiceManager::default();
         let mut control = ControlPlane::new(manager, Duration::from_millis(1), None);
         let response = control.handle_frame(CommandFrame::new(1, "stop ghost"));
-        assert!(response.payload.contains("error") || response.payload.contains("not found") || response.payload.contains("Error"));
+        assert!(
+            response.payload.contains("error")
+                || response.payload.contains("not found")
+                || response.payload.contains("Error")
+        );
     }
 
     #[test]

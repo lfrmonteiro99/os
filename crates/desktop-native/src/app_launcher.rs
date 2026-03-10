@@ -48,10 +48,12 @@ impl AppCatalog {
         self.add_builtin_apps();
 
         // Sort by name
-        self.apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        self.apps
+            .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
         // Deduplicate by name (keep first occurrence)
-        self.apps.dedup_by(|a, b| a.name.to_lowercase() == b.name.to_lowercase());
+        self.apps
+            .dedup_by(|a, b| a.name.to_lowercase() == b.name.to_lowercase());
 
         self.last_scan = Some(std::time::Instant::now());
     }
@@ -64,14 +66,17 @@ impl AppCatalog {
         let q = query.to_lowercase();
         self.apps
             .iter()
-            .filter(|app| app.name.to_lowercase().contains(&q) || app.category.to_lowercase().contains(&q))
+            .filter(|app| {
+                app.name.to_lowercase().contains(&q) || app.category.to_lowercase().contains(&q)
+            })
             .collect()
     }
 
     /// Get apps grouped by category.
     #[allow(dead_code)]
     pub fn by_category(&self) -> Vec<(&str, Vec<&AppEntry>)> {
-        let mut categories: std::collections::BTreeMap<&str, Vec<&AppEntry>> = std::collections::BTreeMap::new();
+        let mut categories: std::collections::BTreeMap<&str, Vec<&AppEntry>> =
+            std::collections::BTreeMap::new();
         for app in &self.apps {
             categories.entry(&app.category).or_default().push(app);
         }
@@ -92,13 +97,17 @@ impl AppCatalog {
             ("TextEdit", "Productivity"),
             ("Settings", "System"),
             ("Activity Monitor", "System"),
+            ("Network Diagnostics", "System"),
             ("Messages", "Communication"),
             ("Quick Controls", "System"),
         ];
         for (name, cat) in builtins {
             self.apps.push(AppEntry {
                 name: name.to_string(),
-                path: PathBuf::from(format!("aurora://{}", name.to_lowercase().replace(' ', "-"))),
+                path: PathBuf::from(format!(
+                    "aurora://{}",
+                    name.to_lowercase().replace(' ', "-")
+                )),
                 category: cat.to_string(),
             });
         }
@@ -108,12 +117,12 @@ impl AppCatalog {
     fn scan_windows(&mut self) {
         // Scan Start Menu shortcuts (both per-user and all-users)
         let start_menu_paths: Vec<PathBuf> = [
-            std::env::var("APPDATA").ok().map(|p| {
-                PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs")
-            }),
-            std::env::var("ProgramData").ok().map(|p| {
-                PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs")
-            }),
+            std::env::var("APPDATA")
+                .ok()
+                .map(|p| PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs")),
+            std::env::var("ProgramData")
+                .ok()
+                .map(|p| PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs")),
         ]
         .into_iter()
         .flatten()
@@ -187,22 +196,32 @@ impl AppCatalog {
         let app_dirs = ["/usr/share/applications", "/usr/local/share/applications"];
         for dir in &app_dirs {
             let path = std::path::Path::new(dir);
-            if !path.exists() { continue; }
+            if !path.exists() {
+                continue;
+            }
             if let Ok(entries) = std::fs::read_dir(path) {
                 for entry in entries.flatten() {
                     let p = entry.path();
-                    if p.extension().and_then(|e| e.to_str()) != Some("desktop") { continue; }
+                    if p.extension().and_then(|e| e.to_str()) != Some("desktop") {
+                        continue;
+                    }
                     if let Ok(content) = std::fs::read_to_string(&p) {
-                        let name = content.lines()
+                        let name = content
+                            .lines()
                             .find(|l| l.starts_with("Name="))
                             .map(|l| l[5..].to_string())
                             .unwrap_or_default();
-                        let cat = content.lines()
+                        let cat = content
+                            .lines()
                             .find(|l| l.starts_with("Categories="))
                             .map(|l| l[11..].split(';').next().unwrap_or("Other").to_string())
                             .unwrap_or_else(|| "Other".to_string());
                         if !name.is_empty() {
-                            self.apps.push(AppEntry { name, path: p, category: cat });
+                            self.apps.push(AppEntry {
+                                name,
+                                path: p,
+                                category: cat,
+                            });
                         }
                     }
                 }
@@ -217,12 +236,17 @@ impl AppCatalog {
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.extension().and_then(|e| e.to_str()) == Some("app") {
-                    let name = p.file_stem()
+                    let name = p
+                        .file_stem()
                         .and_then(|n| n.to_str())
                         .unwrap_or("")
                         .to_string();
                     if !name.is_empty() {
-                        self.apps.push(AppEntry { name, path: p, category: "Applications".to_string() });
+                        self.apps.push(AppEntry {
+                            name,
+                            path: p,
+                            category: "Applications".to_string(),
+                        });
                     }
                 }
             }
@@ -236,38 +260,72 @@ fn categorize_app(name: &str, folder: &str) -> String {
     let lower_folder = folder.to_lowercase();
 
     // Check folder name first
-    if lower_folder.contains("game") { return "Games".to_string(); }
-    if lower_folder.contains("develop") || lower_folder.contains("programming") { return "Development".to_string(); }
-    if lower_folder.contains("office") || lower_folder.contains("microsoft office") { return "Productivity".to_string(); }
-    if lower_folder.contains("system") || lower_folder.contains("admin") { return "System".to_string(); }
-    if lower_folder.contains("startup") { return "Startup".to_string(); }
-    if lower_folder.contains("access") { return "Accessibility".to_string(); }
+    if lower_folder.contains("game") {
+        return "Games".to_string();
+    }
+    if lower_folder.contains("develop") || lower_folder.contains("programming") {
+        return "Development".to_string();
+    }
+    if lower_folder.contains("office") || lower_folder.contains("microsoft office") {
+        return "Productivity".to_string();
+    }
+    if lower_folder.contains("system") || lower_folder.contains("admin") {
+        return "System".to_string();
+    }
+    if lower_folder.contains("startup") {
+        return "Startup".to_string();
+    }
+    if lower_folder.contains("access") {
+        return "Accessibility".to_string();
+    }
 
     // Check app name
-    if lower_name.contains("code") || lower_name.contains("studio") || lower_name.contains("ide")
-        || lower_name.contains("git") || lower_name.contains("terminal") || lower_name.contains("python")
-        || lower_name.contains("node") || lower_name.contains("rust") || lower_name.contains("docker")
+    if lower_name.contains("code")
+        || lower_name.contains("studio")
+        || lower_name.contains("ide")
+        || lower_name.contains("git")
+        || lower_name.contains("terminal")
+        || lower_name.contains("python")
+        || lower_name.contains("node")
+        || lower_name.contains("rust")
+        || lower_name.contains("docker")
     {
         return "Development".to_string();
     }
-    if lower_name.contains("chrome") || lower_name.contains("firefox") || lower_name.contains("edge")
-        || lower_name.contains("browser") || lower_name.contains("opera") || lower_name.contains("brave")
+    if lower_name.contains("chrome")
+        || lower_name.contains("firefox")
+        || lower_name.contains("edge")
+        || lower_name.contains("browser")
+        || lower_name.contains("opera")
+        || lower_name.contains("brave")
     {
         return "Internet".to_string();
     }
-    if lower_name.contains("word") || lower_name.contains("excel") || lower_name.contains("powerpoint")
-        || lower_name.contains("outlook") || lower_name.contains("onenote") || lower_name.contains("notion")
+    if lower_name.contains("word")
+        || lower_name.contains("excel")
+        || lower_name.contains("powerpoint")
+        || lower_name.contains("outlook")
+        || lower_name.contains("onenote")
+        || lower_name.contains("notion")
     {
         return "Productivity".to_string();
     }
-    if lower_name.contains("spotify") || lower_name.contains("music") || lower_name.contains("vlc")
-        || lower_name.contains("media") || lower_name.contains("player") || lower_name.contains("photo")
+    if lower_name.contains("spotify")
+        || lower_name.contains("music")
+        || lower_name.contains("vlc")
+        || lower_name.contains("media")
+        || lower_name.contains("player")
+        || lower_name.contains("photo")
         || lower_name.contains("video")
     {
         return "Media".to_string();
     }
-    if lower_name.contains("discord") || lower_name.contains("slack") || lower_name.contains("teams")
-        || lower_name.contains("zoom") || lower_name.contains("telegram") || lower_name.contains("whatsapp")
+    if lower_name.contains("discord")
+        || lower_name.contains("slack")
+        || lower_name.contains("teams")
+        || lower_name.contains("zoom")
+        || lower_name.contains("telegram")
+        || lower_name.contains("whatsapp")
         || lower_name.contains("skype")
     {
         return "Communication".to_string();
@@ -275,13 +333,21 @@ fn categorize_app(name: &str, folder: &str) -> String {
     if lower_name.contains("steam") || lower_name.contains("epic") || lower_name.contains("game") {
         return "Games".to_string();
     }
-    if lower_name.contains("paint") || lower_name.contains("photoshop") || lower_name.contains("gimp")
-        || lower_name.contains("blender") || lower_name.contains("figma") || lower_name.contains("inkscape")
+    if lower_name.contains("paint")
+        || lower_name.contains("photoshop")
+        || lower_name.contains("gimp")
+        || lower_name.contains("blender")
+        || lower_name.contains("figma")
+        || lower_name.contains("inkscape")
     {
         return "Graphics".to_string();
     }
-    if lower_name.contains("notepad") || lower_name.contains("calc") || lower_name.contains("clock")
-        || lower_name.contains("snip") || lower_name.contains("task manager") || lower_name.contains("cmd")
+    if lower_name.contains("notepad")
+        || lower_name.contains("calc")
+        || lower_name.contains("clock")
+        || lower_name.contains("snip")
+        || lower_name.contains("task manager")
+        || lower_name.contains("cmd")
         || lower_name.contains("powershell")
     {
         return "Utilities".to_string();
@@ -334,7 +400,10 @@ mod tests {
     fn search_by_category() {
         let catalog = AppCatalog::new();
         let results = catalog.search("Utilities");
-        assert!(!results.is_empty(), "Should find apps in Utilities category");
+        assert!(
+            !results.is_empty(),
+            "Should find apps in Utilities category"
+        );
     }
 
     #[test]
@@ -343,7 +412,10 @@ mod tests {
         let groups = catalog.by_category();
         assert!(!groups.is_empty(), "Should have at least one category");
         // System category should exist (builtins include System Overview, Settings, etc.)
-        assert!(groups.iter().any(|(cat, _)| *cat == "System"), "Should have System category");
+        assert!(
+            groups.iter().any(|(cat, _)| *cat == "System"),
+            "Should have System category"
+        );
     }
 
     #[test]
@@ -365,13 +437,20 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for app in &catalog.apps {
             let lower = app.name.to_lowercase();
-            assert!(seen.insert(lower.clone()), "Duplicate app name: {}", app.name);
+            assert!(
+                seen.insert(lower.clone()),
+                "Duplicate app name: {}",
+                app.name
+            );
         }
     }
 
     #[test]
     fn categorize_app_dev_tools() {
-        assert_eq!(categorize_app("Visual Studio Code", "Programs"), "Development");
+        assert_eq!(
+            categorize_app("Visual Studio Code", "Programs"),
+            "Development"
+        );
         assert_eq!(categorize_app("Git Bash", "Git"), "Development");
     }
 
@@ -415,7 +494,11 @@ mod tests {
             .iter()
             .filter(|a| a.path.to_string_lossy().starts_with("aurora://"))
             .collect();
-        assert!(builtins.len() >= 10, "Should have at least 10 builtin apps, got {}", builtins.len());
+        assert!(
+            builtins.len() >= 10,
+            "Should have at least 10 builtin apps, got {}",
+            builtins.len()
+        );
     }
 
     #[test]

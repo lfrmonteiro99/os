@@ -1,5 +1,5 @@
-use std::time::Instant;
 use eframe::egui::Color32;
+use std::time::Instant;
 
 /// A single notification entry
 pub struct AppNotification {
@@ -12,7 +12,12 @@ pub struct AppNotification {
 }
 
 impl AppNotification {
-    pub fn new(app: impl Into<String>, title: impl Into<String>, body: impl Into<String>, color: Color32) -> Self {
+    pub fn new(
+        app: impl Into<String>,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        color: Color32,
+    ) -> Self {
         Self {
             app: app.into(),
             title: title.into(),
@@ -26,9 +31,18 @@ impl AppNotification {
     /// Human-friendly relative time string
     pub fn time_ago(&self) -> String {
         let secs = self.created.elapsed().as_secs();
-        if secs < 60 { return "Just now".to_string(); }
-        if secs < 3600 { return format!("{}m ago", secs / 60); }
-        if secs < 86400 { return format!("{}h ago", secs / 3600); }
+        if secs < 60 {
+            return "Just now".to_string();
+        }
+        if secs < 3600 {
+            return format!("{}m ago", secs / 60);
+        }
+        if secs < 86400 {
+            return format!("{}h ago", secs / 3600);
+        }
+        if secs < 172800 {
+            return "Yesterday".to_string();
+        }
         format!("{}d ago", secs / 86400)
     }
 }
@@ -49,10 +63,27 @@ impl NotificationCenter {
 
     /// Seed with some demo notifications for first launch
     pub fn seed_defaults(&mut self) {
-        if !self.notifications.is_empty() { return; }
-        self.push(AppNotification::new("Mail", "New message", "Build report: all tests passed", Color32::from_rgb(88, 86, 214)));
-        self.push(AppNotification::new("Calendar", "Standup in 15 min", "Daily sync — Conference Room B", Color32::from_rgb(255, 59, 48)));
-        self.push(AppNotification::new("System", "Update available", "AuroraOS 0.2.0 is ready to install", Color32::from_rgb(52, 199, 89)));
+        if !self.notifications.is_empty() {
+            return;
+        }
+        self.push(AppNotification::new(
+            "Mail",
+            "New message",
+            "Build report: all tests passed",
+            Color32::from_rgb(88, 86, 214),
+        ));
+        self.push(AppNotification::new(
+            "Calendar",
+            "Standup in 15 min",
+            "Daily sync — Conference Room B",
+            Color32::from_rgb(255, 59, 48),
+        ));
+        self.push(AppNotification::new(
+            "System",
+            "Update available",
+            "AuroraOS 0.2.0 is ready to install",
+            Color32::from_rgb(52, 199, 89),
+        ));
     }
 
     /// Add a notification
@@ -88,6 +119,23 @@ impl NotificationCenter {
     /// Clear all notifications
     pub fn clear(&mut self) {
         self.notifications.clear();
+    }
+
+    pub fn grouped_by_app(&self) -> Vec<(String, Vec<&AppNotification>)> {
+        let mut groups: Vec<(String, Vec<&AppNotification>)> = Vec::new();
+        for notification in &self.notifications {
+            if let Some((_, items)) = groups.iter_mut().find(|(app, _)| app == &notification.app) {
+                items.push(notification);
+            } else {
+                groups.push((notification.app.clone(), vec![notification]));
+            }
+        }
+        groups
+    }
+
+    pub fn clear_app(&mut self, app: &str) {
+        self.notifications
+            .retain(|notification| notification.app != app);
     }
 
     /// Total count
@@ -209,5 +257,34 @@ mod tests {
         assert_eq!(n.body, "Content");
         assert_eq!(n.color, Color32::RED);
         assert!(!n.read);
+    }
+
+    #[test]
+    fn grouped_by_app_keeps_newest_order_within_groups() {
+        let mut nc = NotificationCenter::new();
+        nc.notify("Mail", "First", "", Color32::WHITE);
+        nc.notify("System", "Second", "", Color32::WHITE);
+        nc.notify("Mail", "Third", "", Color32::WHITE);
+        let groups = nc.grouped_by_app();
+        assert_eq!(groups[0].0, "Mail");
+        assert_eq!(groups[0].1.len(), 2);
+        assert_eq!(groups[1].0, "System");
+    }
+
+    #[test]
+    fn clear_app_removes_only_matching_group() {
+        let mut nc = NotificationCenter::new();
+        nc.notify("Mail", "First", "", Color32::WHITE);
+        nc.notify("System", "Second", "", Color32::WHITE);
+        nc.clear_app("Mail");
+        assert_eq!(nc.len(), 1);
+        assert_eq!(nc.all()[0].app, "System");
+    }
+
+    #[test]
+    fn time_ago_yesterday() {
+        let mut n = AppNotification::new("A", "T", "B", Color32::WHITE);
+        n.created = Instant::now() - std::time::Duration::from_secs(90_000);
+        assert_eq!(n.time_ago(), "Yesterday");
     }
 }

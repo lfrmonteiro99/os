@@ -12,6 +12,7 @@ battery = "0.7"
 chrono = "0.4"
 walkdir = "2"
 portable-pty = "0.8"
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

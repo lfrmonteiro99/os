@@ -1,19 +1,21 @@
+use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::fs;
 use std::fs::OpenOptions;
-use std::collections::{HashMap, VecDeque};
-use std::io::{BufRead, BufReader, Write};
 use std::io::ErrorKind;
+use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::time::{Duration, Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use control_plane::ControlPlane;
-use ipc::{decode_command, decode_response, encode_command, encode_response, CommandFrame, ResponseFrame};
+use ipc::{
+    decode_command, decode_response, encode_command, encode_response, CommandFrame, ResponseFrame,
+};
 use shell::run_shell_with_auth;
 use svc_manager::ServiceManager;
 
@@ -646,10 +648,7 @@ fn main() {
     let control_plane =
         ControlPlane::new(service_manager, boot_duration, config.auth_token.clone());
     if config.daemon {
-        let listen_addr = config
-            .listen
-            .as_deref()
-            .unwrap_or("127.0.0.1:7878");
+        let listen_addr = config.listen.as_deref().unwrap_or("127.0.0.1:7878");
         if let Err(error) = run_daemon(
             listen_addr,
             control_plane,

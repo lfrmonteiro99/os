@@ -18,11 +18,7 @@ impl CommandFrame {
         Self::with_auth(id, None, payload)
     }
 
-    pub fn with_auth(
-        id: u64,
-        auth_token: Option<String>,
-        payload: impl Into<String>,
-    ) -> Self {
+    pub fn with_auth(id: u64, auth_token: Option<String>, payload: impl Into<String>) -> Self {
         Self {
             id,
             auth_token,
@@ -36,12 +32,7 @@ impl ResponseFrame {
         Self::with_shutdown(id, exit, false, payload)
     }
 
-    pub fn with_shutdown(
-        id: u64,
-        exit: bool,
-        shutdown: bool,
-        payload: impl Into<String>,
-    ) -> Self {
+    pub fn with_shutdown(id: u64, exit: bool, shutdown: bool, payload: impl Into<String>) -> Self {
         Self {
             id,
             exit,
@@ -158,7 +149,8 @@ pub fn decode_response(encoded: &str) -> Result<ResponseFrame, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_command, decode_response, encode_command, encode_response, CommandFrame, ResponseFrame,
+        decode_command, decode_response, encode_command, encode_response, CommandFrame,
+        ResponseFrame,
     };
 
     #[test]

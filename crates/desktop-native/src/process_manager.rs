@@ -23,19 +23,25 @@ impl ProcessManager {
     }
 
     pub fn list(&self) -> Vec<ProcessInfo> {
-        self.sys.processes().iter().map(|(pid, proc_)| {
-            ProcessInfo {
+        self.sys
+            .processes()
+            .iter()
+            .map(|(pid, proc_)| ProcessInfo {
                 pid: pid.as_u32(),
                 name: proc_.name().to_string_lossy().to_string(),
                 cpu_usage: proc_.cpu_usage(),
                 memory_bytes: proc_.memory(),
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     pub fn list_sorted_by_cpu(&self) -> Vec<ProcessInfo> {
         let mut procs = self.list();
-        procs.sort_by(|a, b| b.cpu_usage.partial_cmp(&a.cpu_usage).unwrap_or(std::cmp::Ordering::Equal));
+        procs.sort_by(|a, b| {
+            b.cpu_usage
+                .partial_cmp(&a.cpu_usage)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         procs
     }
 
@@ -55,9 +61,14 @@ impl ProcessManager {
     }
 
     pub fn search(&self, query: &str) -> Vec<ProcessInfo> {
-        if query.is_empty() { return self.list(); }
+        if query.is_empty() {
+            return self.list();
+        }
         let q = query.to_lowercase();
-        self.list().into_iter().filter(|p| p.name.to_lowercase().contains(&q)).collect()
+        self.list()
+            .into_iter()
+            .filter(|p| p.name.to_lowercase().contains(&q))
+            .collect()
     }
 
     #[allow(dead_code)]
@@ -66,9 +77,15 @@ impl ProcessManager {
     }
 
     pub fn format_memory(bytes: u64) -> String {
-        if bytes < 1024 { return format!("{bytes} B"); }
-        if bytes < 1024 * 1024 { return format!("{:.1} KB", bytes as f64 / 1024.0); }
-        if bytes < 1024 * 1024 * 1024 { return format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0)); }
+        if bytes < 1024 {
+            return format!("{bytes} B");
+        }
+        if bytes < 1024 * 1024 {
+            return format!("{:.1} KB", bytes as f64 / 1024.0);
+        }
+        if bytes < 1024 * 1024 * 1024 {
+            return format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0));
+        }
         format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
     }
 }
@@ -164,7 +181,10 @@ mod tests {
 
     #[test]
     fn format_memory_gb() {
-        assert_eq!(ProcessManager::format_memory(2 * 1024 * 1024 * 1024), "2.0 GB");
+        assert_eq!(
+            ProcessManager::format_memory(2 * 1024 * 1024 * 1024),
+            "2.0 GB"
+        );
     }
 
     #[test]

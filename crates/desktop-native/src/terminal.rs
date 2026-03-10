@@ -1,7 +1,6 @@
 use std::io::{Read as IoRead, Write};
 use std::sync::{Arc, Mutex};
 
-
 use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 
 pub struct PtyTerminal {
@@ -17,12 +16,14 @@ pub struct PtyTerminal {
 impl PtyTerminal {
     pub fn new() -> Option<Self> {
         let pty_system = NativePtySystem::default();
-        let pair = pty_system.openpty(PtySize {
-            rows: 24,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        }).ok()?;
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .ok()?;
 
         let mut cmd = if cfg!(windows) {
             // On Windows, use PowerShell for a better experience with PATH
@@ -119,8 +120,12 @@ impl PtyTerminal {
     }
 
     pub fn resize(&mut self, cols: u16, rows: u16) {
-        if cols == self.cols && rows == self.rows { return; }
-        if cols == 0 || rows == 0 { return; }
+        if cols == self.cols && rows == self.rows {
+            return;
+        }
+        if cols == 0 || rows == 0 {
+            return;
+        }
         let _ = self.master.resize(PtySize {
             rows,
             cols,
@@ -165,15 +170,11 @@ pub fn open_file_with_system(path: &std::path::Path) {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg(path)
-            .spawn();
+        let _ = std::process::Command::new("open").arg(path).spawn();
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("xdg-open")
-            .arg(path)
-            .spawn();
+        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
     }
 }
 
@@ -189,11 +190,40 @@ pub fn launch_program(program: &str, args: &[&str]) -> Result<(), String> {
 /// Check if a file extension is a text/code file suitable for the built-in editor
 #[allow(dead_code)]
 pub fn is_text_extension(ext: &str) -> bool {
-    matches!(ext,
-        "rs" | "py" | "js" | "ts" | "c" | "cpp" | "h" | "go" | "java" |
-        "md" | "txt" | "log" | "csv" | "json" | "toml" | "yaml" | "yml" |
-        "html" | "css" | "xml" | "sh" | "bat" | "cmd" | "ps1" | "cfg" |
-        "ini" | "conf" | "env" | "gitignore" | "lock" | "sql" | "lua" | "rb"
+    matches!(
+        ext,
+        "rs" | "py"
+            | "js"
+            | "ts"
+            | "c"
+            | "cpp"
+            | "h"
+            | "go"
+            | "java"
+            | "md"
+            | "txt"
+            | "log"
+            | "csv"
+            | "json"
+            | "toml"
+            | "yaml"
+            | "yml"
+            | "html"
+            | "css"
+            | "xml"
+            | "sh"
+            | "bat"
+            | "cmd"
+            | "ps1"
+            | "cfg"
+            | "ini"
+            | "conf"
+            | "env"
+            | "gitignore"
+            | "lock"
+            | "sql"
+            | "lua"
+            | "rb"
     )
 }
 
@@ -225,7 +255,10 @@ mod tests {
 
     #[test]
     fn strip_ansi_mixed() {
-        assert_eq!(strip_ansi("\x1b[1;34mblue\x1b[0m normal \x1b[31mred\x1b[0m"), "blue normal red");
+        assert_eq!(
+            strip_ansi("\x1b[1;34mblue\x1b[0m normal \x1b[31mred\x1b[0m"),
+            "blue normal red"
+        );
     }
 
     #[test]

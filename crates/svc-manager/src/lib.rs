@@ -65,9 +65,7 @@ impl ServiceManager {
         let mut manager = Self::default();
         manager.register("logging").expect("seed logging");
         manager.register("session").expect("seed session");
-        manager
-            .register("notification")
-            .expect("seed notification");
+        manager.register("notification").expect("seed notification");
         manager
     }
 

@@ -30,8 +30,7 @@ fn parse_path(request: &str) -> &str {
 }
 
 fn main() {
-    let listener =
-        TcpListener::bind("127.0.0.1:4173").expect("failed to bind 127.0.0.1:4173");
+    let listener = TcpListener::bind("127.0.0.1:4173").expect("failed to bind 127.0.0.1:4173");
 
     println!("AuroraOS visual preview: http://127.0.0.1:4173");
     println!("Press Ctrl+C to stop.");

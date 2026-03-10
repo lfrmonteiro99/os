@@ -1,6 +1,6 @@
+use eframe::egui::Color32;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
-use eframe::egui::Color32;
 
 pub struct Toast {
     pub title: String,
@@ -12,7 +12,13 @@ pub struct Toast {
 
 impl Toast {
     pub fn new(title: impl Into<String>, body: impl Into<String>, color: Color32) -> Self {
-        Self { title: title.into(), body: body.into(), color, created: Instant::now(), duration: Duration::from_secs(4) }
+        Self {
+            title: title.into(),
+            body: body.into(),
+            color,
+            created: Instant::now(),
+            duration: Duration::from_secs(4),
+        }
     }
 
     pub fn progress(&self) -> f32 {
@@ -67,7 +73,10 @@ impl ToastManager {
 
     /// Get the currently visible toasts (up to max_visible).
     pub fn visible(&self) -> impl Iterator<Item = &Toast> {
-        self.toasts.iter().filter(|t| !t.is_expired()).take(self.max_visible)
+        self.toasts
+            .iter()
+            .filter(|t| !t.is_expired())
+            .take(self.max_visible)
     }
 
     /// How many non-expired toasts are hidden beyond max_visible.
@@ -161,7 +170,12 @@ mod tests {
         for i in 0..=10 {
             let t = i as f32 / 10.0;
             let v = ease_out_cubic(t);
-            assert!(v >= prev, "ease_out_cubic should be monotonic: {} < {}", v, prev);
+            assert!(
+                v >= prev,
+                "ease_out_cubic should be monotonic: {} < {}",
+                v,
+                prev
+            );
             prev = v;
         }
     }

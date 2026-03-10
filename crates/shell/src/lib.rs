@@ -45,7 +45,10 @@ pub fn run_shell_with_auth(
 
 #[cfg(test)]
 mod tests {
-    use ipc::{encode_response, decode_response, encode_command, decode_command, CommandFrame, ResponseFrame};
+    use ipc::{
+        decode_command, decode_response, encode_command, encode_response, CommandFrame,
+        ResponseFrame,
+    };
 
     #[test]
     fn response_encoding_stays_stable() {
