@@ -100,6 +100,7 @@ impl AppCatalog {
             ("Network Diagnostics", "System"),
             ("Disk Utility", "Utilities"),
             ("Font Book", "Productivity"),
+            ("Color Picker", "Utilities"),
             ("Dictionary", "Productivity"),
             ("Console", "Utilities"),
             ("Messages", "Communication"),

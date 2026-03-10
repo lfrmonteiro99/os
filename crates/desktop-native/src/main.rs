@@ -4,6 +4,7 @@ mod auto_save;
 mod browser;
 mod calculator;
 mod clipboard;
+mod color_picker;
 mod console;
 mod dictionary;
 mod disk_utility;
@@ -56,6 +57,7 @@ use calculator::{
     ProgrammerBase,
 };
 use clipboard::AppClipboard;
+use color_picker::{sample_color_from_position, ColorPickerApp};
 use console::{ConsoleApp, ConsoleTelemetrySnapshot};
 use dictionary::{inline_definition as dictionary_inline_definition, DictionaryApp};
 use disk_utility::DiskUtilityApp;
@@ -845,6 +847,7 @@ struct AuroraDesktopApp {
     dictionary_app: DictionaryApp,
     console_app: ConsoleApp,
     font_book: FontBookApp,
+    color_picker: ColorPickerApp,
     proc_search: String,
     proc_sort_by_cpu: bool,
     // Auto-save
@@ -1074,6 +1077,7 @@ impl AuroraDesktopApp {
                 ManagedWindow::new(Pos2::new(260.0, 90.0), Vec2::new(700.0, 520.0)),  // Dictionary
                 ManagedWindow::new(Pos2::new(220.0, 80.0), Vec2::new(860.0, 560.0)),  // Console
                 ManagedWindow::new(Pos2::new(240.0, 70.0), Vec2::new(960.0, 600.0)),  // FontBook
+                ManagedWindow::new(Pos2::new(980.0, 90.0), Vec2::new(360.0, 540.0)),  // ColorPicker
             ],
             z_order: vec![
                 WindowKind::Overview, WindowKind::FileManager, WindowKind::Browser,
@@ -1228,6 +1232,14 @@ impl AuroraDesktopApp {
             dictionary_app: DictionaryApp::new(),
             console_app: ConsoleApp::new(),
             font_book: FontBookApp::new(),
+            color_picker: ColorPickerApp::new(
+                &loaded_settings.color_picker_saved_colors,
+                Color32::from_rgb(
+                    loaded_settings.accent_r,
+                    loaded_settings.accent_g,
+                    loaded_settings.accent_b,
+                ),
+            ),
             proc_search: String::new(),
             proc_sort_by_cpu: true,
             auto_save: AutoSave::new(30, dirs_home()),
@@ -1295,6 +1307,7 @@ impl AuroraDesktopApp {
         app.windows[WindowKind::Dictionary as usize].open = false;
         app.windows[WindowKind::Console as usize].open = false;
         app.windows[WindowKind::FontBook as usize].open = false;
+        app.windows[WindowKind::ColorPicker as usize].open = false;
         app.load_state();
         // Apply persisted settings
         app.cc_volume = app.app_settings.volume;
@@ -11446,6 +11459,13 @@ impl AuroraDesktopApp {
                                 );
                             }
                             WindowKind::FontBook => self.font_book.render(ui),
+                            WindowKind::ColorPicker => {
+                                if self.color_picker.render(ui, &self.clipboard) {
+                                    self.app_settings.color_picker_saved_colors =
+                                        self.color_picker.serialized_favorites();
+                                    let _ = self.app_settings.save();
+                                }
+                            }
                         }
                     }); // end inner padding Frame
 
@@ -13040,6 +13060,7 @@ impl AuroraDesktopApp {
                                 ("Network Diagnostics", WindowKind::NetworkDiagnostics),
                                 ("Disk Utility", WindowKind::DiskUtility),
                                 ("Font Book", WindowKind::FontBook),
+                                ("Color Picker", WindowKind::ColorPicker),
                                 ("Dictionary", WindowKind::Dictionary),
                                 ("Console", WindowKind::Console),
                             ];
@@ -14609,6 +14630,9 @@ impl AuroraDesktopApp {
                                         WindowKind::Dictionary => Color32::from_rgb(255, 214, 10),
                                         WindowKind::Console => Color32::from_rgb(88, 86, 214),
                                         WindowKind::FontBook => Color32::from_rgb(191, 90, 242),
+                                        WindowKind::ColorPicker => {
+                                            self.color_picker.selected_color()
+                                        }
                                         _ => Color32::from_rgb(88, 86, 214),
                                     };
                                     ui.painter().rect_filled(
@@ -14864,6 +14888,7 @@ impl AuroraDesktopApp {
         self.app_settings.show_file_status_bar = self.show_file_status_bar;
         self.app_settings.open_windows = open_indices.join(",");
         self.app_settings.z_order = z_indices.join(",");
+        self.app_settings.color_picker_saved_colors = self.color_picker.serialized_favorites();
         self.persist_sidebar_favorites();
         self.persist_recent_emojis();
         let _ = self.app_settings.save();
@@ -15465,6 +15490,7 @@ impl AuroraDesktopApp {
             "Network Diagnostics" => Some(WindowKind::NetworkDiagnostics),
             "Disk Utility" => Some(WindowKind::DiskUtility),
             "Font Book" => Some(WindowKind::FontBook),
+            "Color Picker" => Some(WindowKind::ColorPicker),
             "Dictionary" => Some(WindowKind::Dictionary),
             "Console" => Some(WindowKind::Console),
             "Messages" => Some(WindowKind::Messages),
@@ -15941,6 +15967,12 @@ impl eframe::App for AuroraDesktopApp {
             self.launchpad_query.clear();
             self.launchpad_page = 0;
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::C) && i.modifiers.ctrl && i.modifiers.shift) {
+            let win = self.window_mut(WindowKind::ColorPicker);
+            win.restore();
+            win.id_epoch = win.id_epoch.saturating_add(1);
+            self.bring_to_front(WindowKind::ColorPicker);
+        }
         // F3 or Ctrl+Up = Mission Control
         if ctx.input(|i| {
             i.key_pressed(egui::Key::F3)
@@ -15950,6 +15982,15 @@ impl eframe::App for AuroraDesktopApp {
         }
 
         let work_rect = Self::desktop_work_rect(ctx);
+        if self.windows[WindowKind::ColorPicker as usize].open && self.color_picker.keep_on_top() {
+            self.bring_to_front(WindowKind::ColorPicker);
+        }
+        if self.color_picker.eyedropper_active() && ctx.input(|i| i.pointer.primary_clicked()) {
+            if let Some(position) = ctx.input(|i| i.pointer.interact_pos()) {
+                let sample = sample_color_from_position(position, work_rect);
+                self.color_picker.apply_sample(sample);
+            }
+        }
         self.handle_shortcuts(ctx, work_rect);
         self.handle_emoji_picker_shortcuts(ctx);
         self.handle_quick_look_shortcuts(ctx);

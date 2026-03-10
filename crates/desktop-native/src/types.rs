@@ -10,7 +10,7 @@ pub const DOCK_HEIGHT: f32 = 96.0;
 pub const DOCK_ICON_BASE: f32 = 48.0;
 pub const DOCK_ICON_MAX_SCALE: f32 = 1.35;
 pub const DOCK_EFFECT_DIST: f32 = 120.0;
-pub const WINDOW_COUNT: usize = 20;
+pub const WINDOW_COUNT: usize = 21;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AppScreenState {
@@ -75,6 +75,7 @@ pub enum WindowKind {
     Dictionary = 17,
     Console = 18,
     FontBook = 19,
+    ColorPicker = 20,
 }
 
 impl WindowKind {
@@ -100,6 +101,7 @@ impl WindowKind {
             17 => Some(Self::Dictionary),
             18 => Some(Self::Console),
             19 => Some(Self::FontBook),
+            20 => Some(Self::ColorPicker),
             _ => None,
         }
     }
@@ -126,6 +128,7 @@ impl WindowKind {
             Self::Dictionary => "Dictionary",
             Self::Console => "Console",
             Self::FontBook => "Font Book",
+            Self::ColorPicker => "Color Picker",
         }
     }
 }
@@ -406,6 +409,7 @@ mod tests {
             WindowKind::Dictionary,
             WindowKind::Console,
             WindowKind::FontBook,
+            WindowKind::ColorPicker,
         ];
         for kind in kinds {
             assert!(!kind.title().is_empty(), "{kind:?} has empty title");
@@ -414,8 +418,8 @@ mod tests {
 
     #[test]
     fn window_count_matches_enum() {
-        assert_eq!(WINDOW_COUNT, 20);
-        assert_eq!(WindowKind::FontBook as usize, WINDOW_COUNT - 1);
+        assert_eq!(WINDOW_COUNT, 21);
+        assert_eq!(WindowKind::ColorPicker as usize, WINDOW_COUNT - 1);
     }
 
     #[test]
@@ -431,6 +435,7 @@ mod tests {
         assert_eq!(WindowKind::Dictionary as usize, 17);
         assert_eq!(WindowKind::Console as usize, 18);
         assert_eq!(WindowKind::FontBook as usize, 19);
+        assert_eq!(WindowKind::ColorPicker as usize, 20);
     }
 
     #[test]
@@ -444,7 +449,7 @@ mod tests {
 
     #[test]
     fn from_index_out_of_bounds() {
-        assert!(WindowKind::from_index(20).is_none());
+        assert!(WindowKind::from_index(21).is_none());
         assert!(WindowKind::from_index(999).is_none());
     }
 

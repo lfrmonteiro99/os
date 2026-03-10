@@ -41,6 +41,7 @@ pub struct AppSettings {
     pub tag_labels: String,
     pub custom_smart_folders: String,
     pub recent_emojis: String,
+    pub color_picker_saved_colors: String,
 }
 
 impl Default for AppSettings {
@@ -80,6 +81,7 @@ impl Default for AppSettings {
             tag_labels: String::new(),
             custom_smart_folders: String::new(),
             recent_emojis: String::new(),
+            color_picker_saved_colors: String::new(),
         }
     }
 }
@@ -156,7 +158,8 @@ impl AppSettings {
                 "  \"show_file_status_bar\": {},\n",
                 "  \"tag_labels\": \"{}\",\n",
                 "  \"custom_smart_folders\": \"{}\",\n",
-                "  \"recent_emojis\": \"{}\"\n",
+                "  \"recent_emojis\": \"{}\",\n",
+                "  \"color_picker_saved_colors\": \"{}\"\n",
                 "}}"
             ),
             self.wallpaper_idx,
@@ -193,6 +196,7 @@ impl AppSettings {
             self.tag_labels,
             self.custom_smart_folders,
             self.recent_emojis,
+            self.color_picker_saved_colors,
         )
     }
 
@@ -300,6 +304,9 @@ impl AppSettings {
         if let Some(v) = parse_json_string(json, "recent_emojis") {
             s.recent_emojis = v;
         }
+        if let Some(v) = parse_json_string(json, "color_picker_saved_colors") {
+            s.color_picker_saved_colors = v;
+        }
         s.clamp();
         s
     }
@@ -405,6 +412,7 @@ mod tests {
         assert!(s.favorite_paths.is_empty());
         assert!(!s.desktop_use_stacks);
         assert!(s.recent_emojis.is_empty());
+        assert!(s.color_picker_saved_colors.is_empty());
     }
 
     #[test]
@@ -496,6 +504,7 @@ mod tests {
         assert!(json.contains("\"idle_lock_minutes\""));
         assert!(json.contains("\"favorite_paths\""));
         assert!(json.contains("\"recent_emojis\""));
+        assert!(json.contains("\"color_picker_saved_colors\""));
     }
 
     // ── JSON parsers ────────────────────────────────────────────────
@@ -756,5 +765,13 @@ mod tests {
     #[test]
     fn parse_json_string_missing() {
         assert_eq!(parse_json_string(r#"{"other": "x"}"#, "path"), None);
+    }
+
+    #[test]
+    fn color_picker_saved_colors_roundtrip() {
+        let mut s = AppSettings::default();
+        s.color_picker_saved_colors = "#FF0000|#00FF00".to_string();
+        let parsed = AppSettings::from_json(&s.to_json());
+        assert_eq!(parsed.color_picker_saved_colors, "#FF0000|#00FF00");
     }
 }
