@@ -50,7 +50,11 @@ use assistant::{
 };
 use auto_save::AutoSave;
 use browser::BrowserState;
-use calculator::{calc_eval, format_calc};
+use calculator::{
+    calc_eval, format_calc, format_programmer_value, parse_programmer_value, programmer_ascii,
+    programmer_eval, programmer_not, programmer_representations, scientific_eval, CalculatorMode,
+    ProgrammerBase,
+};
 use clipboard::AppClipboard;
 use console::{ConsoleApp, ConsoleTelemetrySnapshot};
 use dictionary::{inline_definition as dictionary_inline_definition, DictionaryApp};
@@ -729,6 +733,13 @@ struct AuroraDesktopApp {
     calc_operand: Option<f64>,
     calc_operator: Option<char>,
     calc_reset_next: bool,
+    calc_mode: CalculatorMode,
+    calc_history: Vec<String>,
+    calc_memory: f64,
+    calc_degrees: bool,
+    calc_programmer_base: ProgrammerBase,
+    calc_programmer_operand: Option<i64>,
+    calc_programmer_operator: Option<String>,
     // Notes state
     notes_text: String,
     notes_tabs: Vec<NotesTab>,
@@ -1049,7 +1060,7 @@ impl AuroraDesktopApp {
                 ManagedWindow::new(Pos2::new(340.0, 240.0), Vec2::new(340.0, 280.0)),  // Controls
                 ManagedWindow::new(Pos2::new(180.0, 160.0), Vec2::new(380.0, 400.0)),  // Messages
                 ManagedWindow::new(Pos2::new(460.0, 50.0), Vec2::new(560.0, 420.0)),   // Browser
-                ManagedWindow::new(Pos2::new(500.0, 150.0), Vec2::new(260.0, 380.0)),  // Calculator
+                ManagedWindow::new(Pos2::new(460.0, 120.0), Vec2::new(520.0, 520.0)),  // Calculator
                 ManagedWindow::new(Pos2::new(100.0, 120.0), Vec2::new(400.0, 360.0)),  // Notes
                 ManagedWindow::new(Pos2::new(350.0, 180.0), Vec2::new(340.0, 200.0)),  // MusicPlayer
                 ManagedWindow::new(Pos2::new(200.0, 70.0), Vec2::new(480.0, 400.0)),   // Photos
@@ -1119,6 +1130,13 @@ impl AuroraDesktopApp {
             calc_operand: None,
             calc_operator: None,
             calc_reset_next: false,
+            calc_mode: CalculatorMode::Basic,
+            calc_history: Vec::new(),
+            calc_memory: 0.0,
+            calc_degrees: true,
+            calc_programmer_base: ProgrammerBase::Dec,
+            calc_programmer_operand: None,
+            calc_programmer_operator: None,
             notes_text: "Welcome to AuroraOS Notes!\n\nYou can type anything here.\nThis is a simple scratchpad.\n\n- Todo: finish the desktop shell\n- Todo: add more apps\n- Todo: write documentation".to_string(),
             notes_tabs: vec![NotesTab {
                 title: "Note 1".to_string(),
@@ -2875,6 +2893,14 @@ impl AuroraDesktopApp {
         }
     }
 
+    fn music_seek_fraction(rect: Rect, pointer_x: f32) -> f32 {
+        ((pointer_x - rect.left()) / rect.width()).clamp(0.0, 1.0)
+    }
+
+    fn music_seek_seconds(duration: f32, fraction: f32) -> f32 {
+        (duration * fraction.clamp(0.0, 1.0)).clamp(0.0, duration.max(0.0))
+    }
+
     fn photo_color(idx: usize) -> Color32 {
         let colors = [
             Color32::from_rgb(255, 107, 107),
@@ -3103,6 +3129,7 @@ impl AuroraDesktopApp {
                     }
                 }
                 self.music_playing = true;
+                self.reset_music_progress();
                 let win = self.window_mut(WindowKind::MusicPlayer);
                 win.open = true;
                 win.minimized = false;
@@ -3174,13 +3201,12 @@ impl AuroraDesktopApp {
             Vec::new()
         };
         let current_real_track = using_real_tracks.then(|| {
-            &real_tracks[Self::normalize_music_track_idx(
-                self.music_track_idx,
-                real_tracks.len(),
-            )]
+            &real_tracks[Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len())]
         });
-        let duration =
-            Self::music_track_duration_seconds(self.music_track_idx, current_real_track.map(|p| p.as_path()));
+        let duration = Self::music_track_duration_seconds(
+            self.music_track_idx,
+            current_real_track.map(|p| p.as_path()),
+        );
         let (elapsed, finished) =
             Self::advance_music_elapsed(self.music_elapsed_seconds, delta, duration);
         if !finished {
@@ -8383,145 +8409,528 @@ impl AuroraDesktopApp {
         operand: &mut Option<f64>,
         operator: &mut Option<char>,
         reset_next: &mut bool,
+        mode: &mut CalculatorMode,
+        history: &mut Vec<String>,
+        memory: &mut f64,
+        degrees: &mut bool,
+        programmer_base: &mut ProgrammerBase,
+        programmer_operand: &mut Option<i64>,
+        programmer_operator: &mut Option<String>,
     ) {
-        // Display
+        fn push_history_entry(history: &mut Vec<String>, entry: String) {
+            if !entry.is_empty() {
+                history.push(entry);
+                if history.len() > 16 {
+                    history.remove(0);
+                }
+            }
+        }
+
+        let operator_fill = Color32::from_rgb(255, 149, 0);
+        let utility_fill = Color32::from_rgb(165, 165, 165);
+        let digit_fill = Color32::from_rgb(80, 80, 80);
+
+        ui.horizontal(|ui| {
+            for candidate in [
+                CalculatorMode::Basic,
+                CalculatorMode::Scientific,
+                CalculatorMode::Programmer,
+            ] {
+                let active = *mode == candidate;
+                if ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new(match candidate {
+                                CalculatorMode::Basic => "Basic",
+                                CalculatorMode::Scientific => "Scientific",
+                                CalculatorMode::Programmer => "Programmer",
+                            })
+                            .size(11.0)
+                            .color(Color32::WHITE),
+                        )
+                        .fill(if active {
+                            Color32::from_rgb(10, 132, 255)
+                        } else {
+                            Color32::from_gray(55)
+                        }),
+                    )
+                    .clicked()
+                {
+                    *mode = candidate;
+                    *reset_next = true;
+                }
+            }
+        });
+        ui.add_space(6.0);
+
         egui::Frame::default()
             .fill(Color32::from_rgba_unmultiplied(0, 0, 0, 60))
             .corner_radius(CornerRadius::same(8))
             .inner_margin(egui::Margin::symmetric(12, 10))
             .show(ui, |ui| {
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(display.as_str())
-                            .size(28.0)
-                            .strong()
-                            .color(Color32::WHITE)
-                            .family(egui::FontFamily::Monospace),
-                    );
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new(match mode {
+                                CalculatorMode::Basic => "Basic arithmetic",
+                                CalculatorMode::Scientific => {
+                                    if *degrees {
+                                        "Scientific / Deg"
+                                    } else {
+                                        "Scientific / Rad"
+                                    }
+                                }
+                                CalculatorMode::Programmer => "Programmer",
+                            })
+                            .size(10.0)
+                            .color(Color32::from_gray(160)),
+                        );
+                        if let Some(last) = history.last() {
+                            ui.label(
+                                RichText::new(last)
+                                    .size(10.0)
+                                    .color(Color32::from_gray(120)),
+                            );
+                        }
+                    });
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(display.as_str())
+                                .size(28.0)
+                                .strong()
+                                .color(Color32::WHITE)
+                                .family(egui::FontFamily::Monospace),
+                        );
+                    });
                 });
             });
         ui.add_space(8.0);
 
-        let btn_size = Vec2::new(52.0, 42.0);
-        let rows: &[&[(&str, Color32)]] = &[
-            &[
-                ("C", Color32::from_rgb(165, 165, 165)),
-                ("+/-", Color32::from_rgb(165, 165, 165)),
-                ("%", Color32::from_rgb(165, 165, 165)),
-                ("/", Color32::from_rgb(255, 149, 0)),
-            ],
-            &[
-                ("7", Color32::from_rgb(80, 80, 80)),
-                ("8", Color32::from_rgb(80, 80, 80)),
-                ("9", Color32::from_rgb(80, 80, 80)),
-                ("*", Color32::from_rgb(255, 149, 0)),
-            ],
-            &[
-                ("4", Color32::from_rgb(80, 80, 80)),
-                ("5", Color32::from_rgb(80, 80, 80)),
-                ("6", Color32::from_rgb(80, 80, 80)),
-                ("-", Color32::from_rgb(255, 149, 0)),
-            ],
-            &[
-                ("1", Color32::from_rgb(80, 80, 80)),
-                ("2", Color32::from_rgb(80, 80, 80)),
-                ("3", Color32::from_rgb(80, 80, 80)),
-                ("+", Color32::from_rgb(255, 149, 0)),
-            ],
-            &[
-                ("0", Color32::from_rgb(80, 80, 80)),
-                (".", Color32::from_rgb(80, 80, 80)),
-                ("=", Color32::from_rgb(255, 149, 0)),
-            ],
-        ];
-
-        for row in rows {
+        if *mode == CalculatorMode::Programmer {
             ui.horizontal(|ui| {
-                for (label, color) in *row {
-                    let w = if *label == "0" {
-                        btn_size.x * 2.0 + 4.0
-                    } else {
-                        btn_size.x
-                    };
-                    let text_color = if *color == Color32::from_rgb(255, 149, 0) {
-                        Color32::WHITE
-                    } else if *color == Color32::from_rgb(165, 165, 165) {
-                        Color32::BLACK
-                    } else {
-                        Color32::WHITE
-                    };
-                    let btn = ui.add(
-                        egui::Button::new(
-                            RichText::new(*label).size(16.0).strong().color(text_color),
+                for base in [
+                    ProgrammerBase::Dec,
+                    ProgrammerBase::Hex,
+                    ProgrammerBase::Oct,
+                    ProgrammerBase::Bin,
+                ] {
+                    let active = *programmer_base == base;
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(base.label()).size(10.0).color(Color32::WHITE),
+                            )
+                            .fill(if active {
+                                Color32::from_rgb(52, 120, 246)
+                            } else {
+                                Color32::from_gray(60)
+                            }),
                         )
-                        .min_size(Vec2::new(w, btn_size.y))
-                        .fill(*color)
-                        .corner_radius(CornerRadius::same(21)),
+                        .clicked()
+                    {
+                        if let Some(value) = parse_programmer_value(display, *programmer_base) {
+                            *display = format_programmer_value(value, base);
+                        }
+                        *programmer_base = base;
+                        *reset_next = true;
+                    }
+                }
+            });
+            ui.add_space(6.0);
+            if let Some(value) = parse_programmer_value(display, *programmer_base) {
+                for (label, representation) in programmer_representations(value) {
+                    ui.label(
+                        RichText::new(format!("{label}: {representation}"))
+                            .size(10.0)
+                            .family(egui::FontFamily::Monospace)
+                            .color(Color32::from_gray(180)),
                     );
-                    if btn.clicked() {
-                        match *label {
-                            "C" => {
-                                *display = "0".to_string();
-                                *operand = None;
-                                *operator = None;
-                                *reset_next = false;
-                            }
-                            "+/-" => {
-                                if let Ok(val) = display.parse::<f64>() {
-                                    *display = format_calc(-val);
-                                }
-                            }
-                            "%" => {
-                                if let Ok(val) = display.parse::<f64>() {
-                                    *display = format_calc(val / 100.0);
-                                }
-                            }
-                            "+" | "-" | "*" | "/" => {
-                                if let Ok(val) = display.parse::<f64>() {
-                                    if let (Some(prev), Some(op)) = (*operand, *operator) {
-                                        let result = calc_eval(prev, op, val);
-                                        *display = format_calc(result);
-                                        *operand = Some(result);
-                                    } else {
-                                        *operand = Some(val);
-                                    }
-                                }
-                                *operator = Some(label.chars().next().unwrap());
-                                *reset_next = true;
-                            }
-                            "=" => {
-                                if let (Ok(val), Some(prev), Some(op)) =
-                                    (display.parse::<f64>(), *operand, *operator)
-                                {
-                                    let result = calc_eval(prev, op, val);
-                                    *display = format_calc(result);
-                                    *operand = None;
-                                    *operator = None;
+                }
+                ui.label(
+                    RichText::new(format!("ASCII: {}", programmer_ascii(value).unwrap_or('.')))
+                        .size(10.0)
+                        .color(Color32::from_gray(180)),
+                );
+                ui.add_space(4.0);
+            }
+        }
+
+        if *mode == CalculatorMode::Scientific {
+            let scientific_rows: &[&[&str]] = &[
+                &["MC", "MR", "M+", "M-", "Deg/Rad"],
+                &["sin", "cos", "tan", "ln", "log10"],
+                &["asin", "acos", "atan", "x2", "x3"],
+                &["sqrt", "cbrt", "1/x", "n!", "pi"],
+            ];
+            for row in scientific_rows {
+                ui.horizontal(|ui| {
+                    for label in *row {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new(*label).size(12.0).color(Color32::BLACK),
+                                )
+                                .min_size(Vec2::new(54.0, 32.0))
+                                .fill(utility_fill),
+                            )
+                            .clicked()
+                        {
+                            match *label {
+                                "MC" => *memory = 0.0,
+                                "MR" => {
+                                    *display = format_calc(*memory);
                                     *reset_next = true;
                                 }
-                            }
-                            "." => {
-                                if *reset_next {
-                                    *display = "0.".to_string();
-                                    *reset_next = false;
-                                } else if !display.contains('.') {
-                                    display.push('.');
+                                "M+" => {
+                                    if let Ok(value) = display.parse::<f64>() {
+                                        *memory += value;
+                                    }
                                 }
-                            }
-                            digit => {
-                                if *reset_next || *display == "0" {
-                                    *display = digit.to_string();
-                                    *reset_next = false;
-                                } else {
-                                    display.push_str(digit);
+                                "M-" => {
+                                    if let Ok(value) = display.parse::<f64>() {
+                                        *memory -= value;
+                                    }
+                                }
+                                "Deg/Rad" => *degrees = !*degrees,
+                                "pi" => {
+                                    *display = format_calc(std::f64::consts::PI);
+                                    *reset_next = true;
+                                }
+                                action => {
+                                    if let Ok(value) = display.parse::<f64>() {
+                                        if let Some(result) =
+                                            scientific_eval(action, value, *degrees)
+                                        {
+                                            let expression = format!(
+                                                "{action}({}) = {}",
+                                                display,
+                                                format_calc(result)
+                                            );
+                                            *display = format_calc(result);
+                                            push_history_entry(history, expression);
+                                            *reset_next = true;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                });
+                ui.add_space(4.0);
+            }
+        }
+
+        let btn_size = Vec2::new(52.0, 42.0);
+        let rows: &[&[(&str, Color32)]] = match mode {
+            CalculatorMode::Programmer => &[
+                &[
+                    ("C", utility_fill),
+                    ("NOT", utility_fill),
+                    ("AND", utility_fill),
+                    ("OR", utility_fill),
+                    ("XOR", utility_fill),
+                ],
+                &[
+                    ("A", digit_fill),
+                    ("B", digit_fill),
+                    ("C", digit_fill),
+                    ("D", digit_fill),
+                    ("<<", operator_fill),
+                ],
+                &[
+                    ("E", digit_fill),
+                    ("F", digit_fill),
+                    ("7", digit_fill),
+                    ("8", digit_fill),
+                    (">>", operator_fill),
+                ],
+                &[
+                    ("9", digit_fill),
+                    ("4", digit_fill),
+                    ("5", digit_fill),
+                    ("6", digit_fill),
+                    ("=", operator_fill),
+                ],
+                &[
+                    ("1", digit_fill),
+                    ("2", digit_fill),
+                    ("3", digit_fill),
+                    ("0", digit_fill),
+                    ("+/-", utility_fill),
+                ],
+            ],
+            _ => &[
+                &[
+                    ("C", utility_fill),
+                    ("+/-", utility_fill),
+                    ("%", utility_fill),
+                    ("/", operator_fill),
+                ],
+                &[
+                    ("7", digit_fill),
+                    ("8", digit_fill),
+                    ("9", digit_fill),
+                    ("*", operator_fill),
+                ],
+                &[
+                    ("4", digit_fill),
+                    ("5", digit_fill),
+                    ("6", digit_fill),
+                    ("-", operator_fill),
+                ],
+                &[
+                    ("1", digit_fill),
+                    ("2", digit_fill),
+                    ("3", digit_fill),
+                    ("+", operator_fill),
+                ],
+                &[("0", digit_fill), (".", digit_fill), ("=", operator_fill)],
+            ],
+        };
+
+        ui.columns(2, |columns| {
+            columns[0].vertical(|ui| {
+                for row in rows {
+                    ui.horizontal(|ui| {
+                        for (label, color) in *row {
+                            let w = if *label == "0" && *mode != CalculatorMode::Programmer {
+                                btn_size.x * 2.0 + 4.0
+                            } else {
+                                btn_size.x
+                            };
+                            let text_color = if *color == operator_fill {
+                                Color32::WHITE
+                            } else if *color == utility_fill {
+                                Color32::BLACK
+                            } else {
+                                Color32::WHITE
+                            };
+                            let btn = ui.add(
+                                egui::Button::new(
+                                    RichText::new(*label).size(15.0).strong().color(text_color),
+                                )
+                                .min_size(Vec2::new(w, btn_size.y))
+                                .fill(*color)
+                                .corner_radius(CornerRadius::same(18)),
+                            );
+                            if btn.clicked() {
+                                match *mode {
+                                    CalculatorMode::Programmer => match *label {
+                                        "C" if *color == utility_fill => {
+                                            *display = "0".to_string();
+                                            *programmer_operand = None;
+                                            *programmer_operator = None;
+                                            *reset_next = false;
+                                        }
+                                        "NOT" => {
+                                            if let Some(value) =
+                                                parse_programmer_value(display, *programmer_base)
+                                            {
+                                                let result = programmer_not(value);
+                                                push_history_entry(
+                                                    history,
+                                                    format!(
+                                                        "NOT {} = {}",
+                                                        display,
+                                                        format_programmer_value(
+                                                            result,
+                                                            *programmer_base
+                                                        )
+                                                    ),
+                                                );
+                                                *display = format_programmer_value(
+                                                    result,
+                                                    *programmer_base,
+                                                );
+                                                *reset_next = true;
+                                            }
+                                        }
+                                        "AND" | "OR" | "XOR" | "<<" | ">>" => {
+                                            if let Some(value) =
+                                                parse_programmer_value(display, *programmer_base)
+                                            {
+                                                *programmer_operand = Some(value);
+                                                *programmer_operator = Some((*label).to_string());
+                                                *reset_next = true;
+                                            }
+                                        }
+                                        "=" => {
+                                            if let (Some(left), Some(op), Some(right)) = (
+                                                *programmer_operand,
+                                                programmer_operator.clone(),
+                                                parse_programmer_value(display, *programmer_base),
+                                            ) {
+                                                if let Some(result) =
+                                                    programmer_eval(left, &op, right)
+                                                {
+                                                    push_history_entry(
+                                                        history,
+                                                        format!(
+                                                            "{} {} {} = {}",
+                                                            format_programmer_value(
+                                                                left,
+                                                                *programmer_base
+                                                            ),
+                                                            op,
+                                                            format_programmer_value(
+                                                                right,
+                                                                *programmer_base
+                                                            ),
+                                                            format_programmer_value(
+                                                                result,
+                                                                *programmer_base
+                                                            )
+                                                        ),
+                                                    );
+                                                    *display = format_programmer_value(
+                                                        result,
+                                                        *programmer_base,
+                                                    );
+                                                    *programmer_operand = None;
+                                                    *programmer_operator = None;
+                                                    *reset_next = true;
+                                                }
+                                            }
+                                        }
+                                        "+/-" => {
+                                            if let Some(value) =
+                                                parse_programmer_value(display, *programmer_base)
+                                            {
+                                                *display = format_programmer_value(
+                                                    -value,
+                                                    *programmer_base,
+                                                );
+                                            }
+                                        }
+                                        digit => {
+                                            let allowed = match *programmer_base {
+                                                ProgrammerBase::Dec => "0123456789",
+                                                ProgrammerBase::Hex => "0123456789ABCDEF",
+                                                ProgrammerBase::Oct => "01234567",
+                                                ProgrammerBase::Bin => "01",
+                                            };
+                                            if allowed.contains(digit) {
+                                                if *reset_next || *display == "0" {
+                                                    *display = digit.to_string();
+                                                    *reset_next = false;
+                                                } else {
+                                                    display.push_str(digit);
+                                                }
+                                            }
+                                        }
+                                    },
+                                    _ => match *label {
+                                        "C" => {
+                                            *display = "0".to_string();
+                                            *operand = None;
+                                            *operator = None;
+                                            *reset_next = false;
+                                        }
+                                        "+/-" => {
+                                            if let Ok(val) = display.parse::<f64>() {
+                                                *display = format_calc(-val);
+                                            }
+                                        }
+                                        "%" => {
+                                            if let Ok(val) = display.parse::<f64>() {
+                                                *display = format_calc(val / 100.0);
+                                            }
+                                        }
+                                        "+" | "-" | "*" | "/" => {
+                                            if let Ok(val) = display.parse::<f64>() {
+                                                if let (Some(prev), Some(op)) =
+                                                    (*operand, *operator)
+                                                {
+                                                    let result = calc_eval(prev, op, val);
+                                                    *display = format_calc(result);
+                                                    *operand = Some(result);
+                                                } else {
+                                                    *operand = Some(val);
+                                                }
+                                            }
+                                            *operator = Some(label.chars().next().unwrap());
+                                            *reset_next = true;
+                                        }
+                                        "=" => {
+                                            if let (Ok(val), Some(prev), Some(op)) =
+                                                (display.parse::<f64>(), *operand, *operator)
+                                            {
+                                                let result = calc_eval(prev, op, val);
+                                                push_history_entry(
+                                                    history,
+                                                    format!(
+                                                        "{} {} {} = {}",
+                                                        format_calc(prev),
+                                                        op,
+                                                        format_calc(val),
+                                                        format_calc(result)
+                                                    ),
+                                                );
+                                                *display = format_calc(result);
+                                                *operand = None;
+                                                *operator = None;
+                                                *reset_next = true;
+                                            }
+                                        }
+                                        "." => {
+                                            if *reset_next {
+                                                *display = "0.".to_string();
+                                                *reset_next = false;
+                                            } else if !display.contains('.') {
+                                                display.push('.');
+                                            }
+                                        }
+                                        digit => {
+                                            if *reset_next || *display == "0" {
+                                                *display = digit.to_string();
+                                                *reset_next = false;
+                                            } else {
+                                                display.push_str(digit);
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    });
+                    ui.add_space(4.0);
                 }
             });
-            ui.add_space(4.0);
-        }
+
+            columns[1].vertical(|ui| {
+                egui::Frame::default()
+                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 10))
+                    .stroke(Stroke::new(1.0, Color32::from_white_alpha(20)))
+                    .corner_radius(CornerRadius::same(8))
+                    .inner_margin(egui::Margin::same(8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new("History Tape")
+                                    .size(11.0)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            );
+                            if ui.small_button("Clear").clicked() {
+                                history.clear();
+                            }
+                        });
+                        ui.add_space(4.0);
+                        egui::ScrollArea::vertical()
+                            .max_height(250.0)
+                            .show(ui, |ui| {
+                                for entry in history.iter().rev() {
+                                    if ui.small_button(entry).clicked() {
+                                        if let Some(result) = entry.split(" = ").last() {
+                                            *display = result.to_string();
+                                            *reset_next = true;
+                                        }
+                                    }
+                                }
+                            });
+                    });
+            });
+        });
     }
 
     fn content_notes(ui: &mut egui::Ui, text: &mut String) -> bool {
@@ -8621,6 +9030,15 @@ impl AuroraDesktopApp {
             let (name, artist, color) = Self::music_track_info(self.music_track_idx);
             (name.to_string(), artist, color)
         };
+        let duration_seconds = Self::music_track_duration_seconds(
+            self.music_track_idx,
+            current_real_track.map(|p| p.as_path()),
+        );
+        let progress = if duration_seconds > 0.0 {
+            (self.music_elapsed_seconds / duration_seconds).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
 
         // Album art
         let art_size = Vec2::splat(80.0);
@@ -8670,9 +9088,10 @@ impl AuroraDesktopApp {
         ui.add_space(12.0);
 
         // Progress bar
-        let progress = 0.35; // Simulated
-        let (bar_rect, _) =
-            ui.allocate_exact_size(Vec2::new(ui.available_width(), 4.0), Sense::hover());
+        let (bar_rect, bar_resp) = ui.allocate_exact_size(
+            Vec2::new(ui.available_width(), 4.0),
+            Sense::click_and_drag(),
+        );
         ui.painter().rect_filled(
             bar_rect,
             CornerRadius::same(2),
@@ -8681,15 +9100,22 @@ impl AuroraDesktopApp {
         let filled = Rect::from_min_size(bar_rect.min, Vec2::new(bar_rect.width() * progress, 4.0));
         ui.painter()
             .rect_filled(filled, CornerRadius::same(2), color);
+        if bar_resp.clicked() || bar_resp.dragged() {
+            if let Some(pointer) = bar_resp.interact_pointer_pos() {
+                let fraction = Self::music_seek_fraction(bar_rect, pointer.x);
+                self.music_elapsed_seconds = Self::music_seek_seconds(duration_seconds, fraction);
+                self.music_last_tick = Instant::now();
+            }
+        }
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new("1:12")
+                RichText::new(Self::format_music_time(self.music_elapsed_seconds))
                     .size(10.0)
                     .color(Color32::from_gray(120)),
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(
-                    RichText::new("3:28")
+                    RichText::new(Self::format_music_time(duration_seconds))
                         .size(10.0)
                         .color(Color32::from_gray(120)),
                 );
@@ -8743,6 +9169,7 @@ impl AuroraDesktopApp {
                     }
                 };
                 self.music_track_idx = next_idx;
+                self.reset_music_progress();
             }
             // Play/Pause
             let play_label = if self.music_playing { "| |" } else { " > " };
@@ -8761,6 +9188,7 @@ impl AuroraDesktopApp {
                 .clicked()
             {
                 self.music_playing = !self.music_playing;
+                self.music_last_tick = Instant::now();
             }
             // Next
             if ui
@@ -8788,6 +9216,7 @@ impl AuroraDesktopApp {
                     }
                 };
                 self.music_track_idx = next_idx;
+                self.reset_music_progress();
             }
             if ui
                 .add(
@@ -8897,6 +9326,7 @@ impl AuroraDesktopApp {
                         if resp.interact(Sense::click()).clicked() {
                             self.music_track_idx = i;
                             self.music_playing = true;
+                            self.reset_music_progress();
                         }
                     }
                 } else {
@@ -8940,6 +9370,7 @@ impl AuroraDesktopApp {
                         if resp.interact(Sense::click()).clicked() {
                             self.music_track_idx = i;
                             self.music_playing = true;
+                            self.reset_music_progress();
                         }
                     }
                 }
@@ -10939,6 +11370,13 @@ impl AuroraDesktopApp {
                                 &mut self.calc_operand,
                                 &mut self.calc_operator,
                                 &mut self.calc_reset_next,
+                                &mut self.calc_mode,
+                                &mut self.calc_history,
+                                &mut self.calc_memory,
+                                &mut self.calc_degrees,
+                                &mut self.calc_programmer_base,
+                                &mut self.calc_programmer_operand,
+                                &mut self.calc_programmer_operator,
                             ),
                             WindowKind::Notes => {
                                 if Self::content_notes(ui, &mut self.notes_text) {
@@ -14655,6 +15093,7 @@ impl AuroraDesktopApp {
                                     .clicked()
                             {
                                 self.music_playing = !self.music_playing;
+                                self.music_last_tick = Instant::now();
                             }
                         }
                         PipSource::Photo(idx) => {
@@ -15371,6 +15810,9 @@ impl eframe::App for AuroraDesktopApp {
         self.handle_battery_alerts();
         self.maybe_process_assistant_query();
         self.maybe_tick_music_playback();
+        if self.music_playing {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
 
         // Refresh real system data periodically
         if self.sysinfo.should_refresh() {
@@ -16991,6 +17433,64 @@ mod tests {
             AuroraDesktopApp::step_music_track_idx_with_repeat(1, &queue, 1, false),
             Some(3)
         );
+    }
+
+    #[test]
+    fn format_music_time_uses_minute_second_clock() {
+        assert_eq!(AuroraDesktopApp::format_music_time(0.0), "0:00");
+        assert_eq!(AuroraDesktopApp::format_music_time(61.2), "1:01");
+    }
+
+    #[test]
+    fn advance_music_elapsed_reports_track_end() {
+        assert_eq!(
+            AuroraDesktopApp::advance_music_elapsed(10.0, 5.0, 20.0),
+            (15.0, false)
+        );
+        assert_eq!(
+            AuroraDesktopApp::advance_music_elapsed(18.0, 5.0, 20.0),
+            (20.0, true)
+        );
+    }
+
+    #[test]
+    fn music_track_duration_seconds_uses_mock_and_real_inputs() {
+        let root = std::env::temp_dir().join(format!(
+            "aurora_music_duration_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("ambient.flac");
+        std::fs::write(&path, vec![0_u8; 96_000]).unwrap();
+
+        assert_eq!(
+            AuroraDesktopApp::music_track_duration_seconds(0, None),
+            208.0
+        );
+        let real_duration = AuroraDesktopApp::music_track_duration_seconds(0, Some(&path));
+        assert!(real_duration >= 90.0);
+        assert!(real_duration <= 420.0);
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn music_seek_fraction_clamps_to_bar_bounds() {
+        let rect = Rect::from_min_size(Pos2::new(10.0, 0.0), Vec2::new(200.0, 4.0));
+        assert_eq!(AuroraDesktopApp::music_seek_fraction(rect, -20.0), 0.0);
+        assert_eq!(AuroraDesktopApp::music_seek_fraction(rect, 110.0), 0.5);
+        assert_eq!(AuroraDesktopApp::music_seek_fraction(rect, 400.0), 1.0);
+    }
+
+    #[test]
+    fn music_seek_seconds_scales_fraction_to_duration() {
+        assert_eq!(AuroraDesktopApp::music_seek_seconds(200.0, 0.25), 50.0);
+        assert_eq!(AuroraDesktopApp::music_seek_seconds(200.0, -1.0), 0.0);
+        assert_eq!(AuroraDesktopApp::music_seek_seconds(200.0, 2.0), 200.0);
     }
 
     #[test]
