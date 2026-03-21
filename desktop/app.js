@@ -207,17 +207,28 @@
     });
   });
 
-  /* ── 5. Dock Magnification ─────────────────────────── */
+  /* ── 5. Dock Magnification (macOS-accurate) ──────── */
   const dock = document.getElementById("dock");
   const dockIcons = dock.querySelectorAll(".dock-icon");
 
-  const EFFECT_DISTANCE = 100;
-  const MAX_SCALE = 1.45;
+  // macOS uses a wide magnification radius (~130px) with a smooth bell curve
+  const EFFECT_DISTANCE = 130;
+  const MAX_SCALE = 1.6;
+  const BASE_SIZE = 54; // must match CSS .dock-icon width/height
+
+  // Mark default apps as "running" (with indicator dot)
+  var runningApps = ["Finder", "Safari", "Messages"];
+  dockIcons.forEach(function (icon) {
+    if (runningApps.indexOf(icon.dataset.app) !== -1) {
+      icon.classList.add("running");
+    }
+  });
 
   function resetDockIcons() {
     dockIcons.forEach(function (icon) {
       icon.style.transform = "scale(1)";
       icon.style.marginBottom = "0";
+      icon.style.marginTop = "0";
     });
   }
 
@@ -232,42 +243,48 @@
       if (distance > EFFECT_DISTANCE) {
         icon.style.transform = "scale(1)";
         icon.style.marginBottom = "0";
+        icon.style.marginTop = "0";
         return;
       }
 
       var ratio = 1 - distance / EFFECT_DISTANCE;
-      // Smooth cosine curve for natural magnification
-      var t = (1 - Math.cos(ratio * Math.PI)) / 2;
+      // macOS uses a Gaussian-like bell curve for the magnification falloff
+      var t = Math.pow(Math.cos((1 - ratio) * Math.PI * 0.5), 2);
       var scale = 1 + (MAX_SCALE - 1) * t;
       icon.style.transform = "scale(" + scale.toFixed(3) + ")";
-      // Lift scaled icons to maintain dock bottom alignment
-      icon.style.marginBottom = ((scale - 1) * 25).toFixed(1) + "px";
+      // Push icon upward proportionally — the dock itself stays at bottom
+      var lift = (scale - 1) * (BASE_SIZE * 0.5);
+      icon.style.marginBottom = lift.toFixed(1) + "px";
+      icon.style.marginTop = "-" + lift.toFixed(1) + "px";
     });
   });
 
   dock.addEventListener("mouseleave", resetDockIcons);
 
-  // Dock icon click — bounce animation
+  // Dock icon click — macOS-style bounce (app launch animation)
   dockIcons.forEach(function (icon) {
     icon.addEventListener("click", function () {
+      // Add running indicator on click
+      icon.classList.add("running");
       icon.style.animation = "none";
-      // Force reflow
       void icon.offsetHeight;
-      icon.style.animation = "dockBounce 0.5s ease";
-      setTimeout(function () { icon.style.animation = "none"; }, 500);
+      icon.style.animation = "dockBounce 0.65s cubic-bezier(0.28, 0.84, 0.42, 1)";
+      setTimeout(function () { icon.style.animation = "none"; }, 700);
     });
   });
 
-  // Add bounce keyframes dynamically
+  // macOS-accurate bounce keyframes
   var bounceStyle = document.createElement("style");
   bounceStyle.textContent =
     "@keyframes dockBounce {" +
-    "  0% { transform: translateY(0); }" +
-    "  20% { transform: translateY(-16px); }" +
-    "  40% { transform: translateY(0); }" +
-    "  55% { transform: translateY(-8px); }" +
-    "  70% { transform: translateY(0); }" +
-    "  82% { transform: translateY(-3px); }" +
+    "  0%   { transform: translateY(0); }" +
+    "  15%  { transform: translateY(-22px); }" +
+    "  30%  { transform: translateY(0); }" +
+    "  43%  { transform: translateY(-12px); }" +
+    "  58%  { transform: translateY(0); }" +
+    "  70%  { transform: translateY(-5px); }" +
+    "  82%  { transform: translateY(0); }" +
+    "  90%  { transform: translateY(-2px); }" +
     "  100% { transform: translateY(0); }" +
     "}";
   document.head.appendChild(bounceStyle);

@@ -614,60 +614,83 @@ html, body {
 }
 
 /* ── Dock ──────────────────────────────────────────── */
+/* Pixel-perfect macOS Sonoma / Ventura dock recreation */
 .dock-wrap {
-  position: fixed; bottom: 4px;
+  position: fixed; bottom: 0;
   left: 0; right: 0;
   display: flex; justify-content: center; align-items: flex-end;
   z-index: 50;
   pointer-events: none;
-  padding-bottom: 2px;
+  padding-bottom: 5px;
 }
 
 .dock {
   display: flex; align-items: flex-end;
-  gap: 1px; padding: 3px 6px 4px;
-  background: rgba(255, 255, 255, 0.18);
-  border: 0.5px solid rgba(255, 255, 255, 0.25);
-  border-radius: 18px;
-  backdrop-filter: saturate(170%) blur(30px);
-  -webkit-backdrop-filter: saturate(170%) blur(30px);
+  gap: 0; padding: 4px 8px 5px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 0.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 22px;
+  backdrop-filter: saturate(180%) blur(40px);
+  -webkit-backdrop-filter: saturate(180%) blur(40px);
   pointer-events: all;
-  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.05);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.06),
+    0 2px 12px rgba(0, 0, 0, 0.12),
+    0 8px 30px rgba(0, 0, 0, 0.08),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.35);
 }
 
 .dock-icon {
-  width: 50px; height: 50px;
-  border-radius: 11.5px;
+  width: 54px; height: 54px;
+  /* macOS squircle — CSS approximation via smooth corners */
+  border-radius: 12.5px;
   display: flex; align-items: center; justify-content: center;
   cursor: default;
-  transition: transform 0.12s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              margin 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
   transform-origin: bottom center;
   position: relative;
   flex-shrink: 0;
+  margin: 0 1px;
   box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.12),
-    inset 0 0.5px 0 rgba(255,255,255,0.15);
+    0 2px 5px rgba(0, 0, 0, 0.15),
+    0 0.5px 1px rgba(0, 0, 0, 0.08),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.2);
 }
 
+/* Running app indicator dot */
+.dock-icon::before {
+  content: "";
+  position: absolute;
+  bottom: -6px; left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.dock-icon.running::before { opacity: 1; }
+
 .dock-icon-symbol {
-  font-size: 24px; color: #fff;
+  font-size: 26px; color: #fff;
   pointer-events: none;
   display: flex; align-items: center; justify-content: center;
 }
 
 /* Finder icon */
 .dock-icon-finder {
-  background: linear-gradient(180deg, #68d3ff, #3da4f5);
+  background: linear-gradient(180deg, #68d3ff 0%, #3da4f5 100%);
   overflow: hidden;
 }
 
 .dock-icon-face {
-  width: 34px; height: 36px;
+  width: 36px; height: 38px;
   position: relative; display: flex;
 }
 
 .finder-face-left {
-  width: 17px; height: 36px;
+  width: 18px; height: 38px;
   background: #215faa;
   border-radius: 4px 0 0 4px;
   position: relative;
@@ -676,20 +699,20 @@ html, body {
 .finder-face-left::before {
   content: ""; position: absolute;
   top: 10px; left: 5px;
-  width: 6px; height: 6px;
+  width: 7px; height: 7px;
   background: white; border-radius: 50%;
 }
 
 .finder-face-left::after {
   content: ""; position: absolute;
   bottom: 6px; left: 3px; right: 2px;
-  height: 8px;
+  height: 9px;
   border-top: 2px solid rgba(255,255,255,0.7);
   border-radius: 0 0 2px 2px;
 }
 
 .finder-face-right {
-  width: 17px; height: 36px;
+  width: 18px; height: 38px;
   background: #add8f0;
   border-radius: 0 4px 4px 0;
   position: relative;
@@ -698,14 +721,14 @@ html, body {
 .finder-face-right::before {
   content: ""; position: absolute;
   top: 10px; right: 5px;
-  width: 6px; height: 6px;
+  width: 7px; height: 7px;
   background: #215faa; border-radius: 50%;
 }
 
 .finder-face-right::after {
   content: ""; position: absolute;
   bottom: 6px; right: 3px; left: 2px;
-  height: 8px;
+  height: 9px;
   border-top: 2px solid rgba(0,0,0,0.2);
   border-radius: 0 0 2px 2px;
 }
@@ -720,13 +743,14 @@ html, body {
 }
 
 .calendar-day-label {
-  font-size: 9px; font-weight: 700;
-  color: var(--red); letter-spacing: 0.5px;
-  margin-top: 4px;
+  font-size: 9.5px; font-weight: 700;
+  color: var(--red); letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin-top: 5px;
 }
 
 .calendar-day-number {
-  font-size: 24px; font-weight: 300;
+  font-size: 26px; font-weight: 300;
   color: var(--ink); line-height: 1;
   margin-top: -2px;
 }
@@ -743,13 +767,13 @@ html, body {
 }
 
 .stack-line {
-  width: 22px; height: 2.5px;
+  width: 24px; height: 2.5px;
   background: rgba(255,255,255,0.7);
   border-radius: 1px;
 }
 
-.stack-line:nth-child(2) { width: 18px; }
-.stack-line:nth-child(3) { width: 14px; }
+.stack-line:nth-child(2) { width: 20px; }
+.stack-line:nth-child(3) { width: 16px; }
 
 /* Trash dock icon */
 .dock-icon-trash {
@@ -757,29 +781,35 @@ html, body {
   border: 0.5px solid rgba(0,0,0,0.06);
 }
 
+/* macOS dock separator: thin vertical line */
 .dock-separator {
-  width: 1px; height: 42px;
-  background: rgba(255, 255, 255, 0.25);
-  margin: 0 3px;
+  width: 1px; height: 44px;
+  background: rgba(255, 255, 255, 0.3);
+  margin: 0 6px;
   align-self: center;
   flex-shrink: 0;
+  border-radius: 0.5px;
 }
 
-/* Dock tooltip */
+/* Dock tooltip — macOS style: centered pill above icon */
 .dock-icon::after {
   content: attr(data-app);
   position: absolute;
-  bottom: calc(100% + 6px); left: 50%;
-  transform: translateX(-50%) scale(0.9);
-  background: rgba(30, 30, 30, 0.88);
-  color: #fff; font-size: 12px;
-  padding: 3px 10px; border-radius: 5px;
+  bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%) scale(0.85);
+  background: rgba(30, 30, 30, 0.92);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 12.5px; font-weight: 400;
+  padding: 4px 12px; border-radius: 6px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s, transform 0.12s;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25),
+              0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  z-index: 60;
 }
 
 .dock-icon:hover::after {
@@ -1898,7 +1928,9 @@ html, body {
 /* ── Responsive ────────────────────────────────────── */
 @media (max-width: 900px) {
   .window { transform: scale(0.8); transform-origin: top left; }
-  .dock-icon { width: 40px; height: 40px; border-radius: 9px; }
+  .dock { padding: 3px 6px 4px; border-radius: 18px; }
+  .dock-icon { width: 42px; height: 42px; border-radius: 10px; margin: 0; }
+  .dock-separator { height: 36px; margin: 0 4px; }
   .widgets-panel { width: 280px; right: -280px; }
   .clipboard-panel { width: 300px; }
   .notif-panel { width: 300px; right: -300px; }
