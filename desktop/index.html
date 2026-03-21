@@ -477,6 +477,170 @@
       </div>
     </footer>
 
+    <!-- Widgets Panel (Today View) -->
+    <div class="widgets-panel" id="widgets-panel">
+      <div class="widgets-header">
+        <h2>Widgets</h2>
+        <button class="widgets-edit-btn" id="widgets-edit-btn">Edit Widgets</button>
+      </div>
+      <div class="widgets-scroll">
+        <!-- Clock Widget -->
+        <div class="widget widget-clock">
+          <div class="widget-label">Clock</div>
+          <div class="widget-clock-face" id="widget-clock-face">
+            <div class="clock-hand clock-hour" id="clock-hour"></div>
+            <div class="clock-hand clock-minute" id="clock-minute"></div>
+            <div class="clock-hand clock-second" id="clock-second"></div>
+            <div class="clock-center-dot"></div>
+          </div>
+          <div class="widget-clock-digital" id="widget-clock-digital"></div>
+        </div>
+        <!-- Calendar Widget -->
+        <div class="widget widget-calendar">
+          <div class="widget-label">Calendar</div>
+          <div class="widget-cal-header" id="widget-cal-header"></div>
+          <div class="widget-cal-grid" id="widget-cal-grid"></div>
+        </div>
+        <!-- Weather Widget -->
+        <div class="widget widget-weather">
+          <div class="widget-weather-top">
+            <div>
+              <div class="widget-weather-location">San Francisco</div>
+              <div class="widget-weather-temp">18°</div>
+              <div class="widget-weather-desc">Partly Cloudy</div>
+            </div>
+            <div class="widget-weather-icon">
+              <svg viewBox="0 0 64 64" width="52" height="52">
+                <circle cx="28" cy="28" r="10" fill="#ffcc00"/>
+                <path d="M28 12v-4M28 48v-4M12 28H8M48 28h-4M16.3 16.3l-2.8-2.8M42.5 42.5l-2.8-2.8M39.7 16.3l2.8-2.8M13.5 42.5l2.8-2.8" stroke="#ffcc00" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M38 36a12 12 0 00-20-8.5A8 8 0 0018 44h22a6 6 0 002-11.7A12 12 0 0038 36z" fill="rgba(255,255,255,0.85)"/>
+              </svg>
+            </div>
+          </div>
+          <div class="widget-weather-forecast" id="widget-weather-forecast"></div>
+        </div>
+        <!-- CPU/Memory Widget -->
+        <div class="widget widget-system">
+          <div class="widget-label">System Monitor</div>
+          <div class="widget-sys-row"><span>CPU</span><div class="widget-sys-bar"><div class="widget-sys-fill" id="sys-cpu" style="width:34%;"></div></div><span class="widget-sys-pct" id="sys-cpu-pct">34%</span></div>
+          <div class="widget-sys-row"><span>Memory</span><div class="widget-sys-bar"><div class="widget-sys-fill widget-sys-fill-mem" id="sys-mem" style="width:62%;"></div></div><span class="widget-sys-pct" id="sys-mem-pct">62%</span></div>
+          <div class="widget-sys-row"><span>Disk</span><div class="widget-sys-bar"><div class="widget-sys-fill widget-sys-fill-disk" id="sys-disk" style="width:45%;"></div></div><span class="widget-sys-pct" id="sys-disk-pct">45%</span></div>
+          <div class="widget-sys-row"><span>Network</span><div class="widget-sys-bar"><div class="widget-sys-fill widget-sys-fill-net" id="sys-net" style="width:18%;"></div></div><span class="widget-sys-pct" id="sys-net-pct">18%</span></div>
+        </div>
+        <!-- Notes Widget -->
+        <div class="widget widget-notes">
+          <div class="widget-label">Quick Note</div>
+          <textarea class="widget-notes-area" placeholder="Type a quick note..."></textarea>
+        </div>
+        <!-- Battery Widget -->
+        <div class="widget widget-battery">
+          <div class="widget-label">Battery</div>
+          <div class="widget-battery-row">
+            <div class="widget-battery-icon">
+              <svg viewBox="0 0 40 20" width="40" height="20" fill="none">
+                <rect x="1" y="1" width="32" height="18" rx="3" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
+                <rect x="3" y="3" width="22" height="14" rx="2" fill="#34c759"/>
+                <path d="M35 7v6a3 3 0 000-6z" fill="rgba(255,255,255,0.4)"/>
+              </svg>
+            </div>
+            <div class="widget-battery-info">
+              <div class="widget-battery-pct">72%</div>
+              <div class="widget-battery-status">Remaining: ~4h 30m</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hot Corners Overlay -->
+    <div class="hot-corner hot-corner-tl" id="hot-corner-tl" data-action="mission-control"></div>
+    <div class="hot-corner hot-corner-tr" id="hot-corner-tr" data-action="widgets"></div>
+    <div class="hot-corner hot-corner-bl" id="hot-corner-bl" data-action="desktop"></div>
+    <div class="hot-corner hot-corner-br" id="hot-corner-br" data-action="launchpad"></div>
+    <!-- Hot Corners Settings -->
+    <div class="hot-corners-indicator" id="hot-corners-indicator"></div>
+
+    <!-- Color Picker Window -->
+    <section class="window window-colorpicker" data-window style="top:100px;left:120px;width:340px;height:480px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="traffic-lights">
+          <span class="tl-btn tl-close"></span>
+          <span class="tl-btn tl-minimize"></span>
+          <span class="tl-btn tl-maximize"></span>
+        </div>
+        <span class="window-title">Color Picker</span>
+      </div>
+      <div class="window-content colorpicker-content">
+        <div class="cp-preview-row">
+          <div class="cp-preview" id="cp-preview"></div>
+          <div class="cp-values">
+            <div class="cp-value-row"><label>HEX</label><input type="text" id="cp-hex" value="#FF5733" class="cp-input" /></div>
+            <div class="cp-value-row"><label>R</label><input type="number" id="cp-r" value="255" min="0" max="255" class="cp-input cp-input-sm" /></div>
+            <div class="cp-value-row"><label>G</label><input type="number" id="cp-g" value="87" min="0" max="255" class="cp-input cp-input-sm" /></div>
+            <div class="cp-value-row"><label>B</label><input type="number" id="cp-b" value="51" min="0" max="255" class="cp-input cp-input-sm" /></div>
+          </div>
+        </div>
+        <canvas id="cp-canvas" class="cp-canvas" width="300" height="200"></canvas>
+        <input type="range" id="cp-hue" min="0" max="360" value="11" class="cp-hue-slider" />
+        <div class="cp-palette-label">Saved Colors</div>
+        <div class="cp-palette" id="cp-palette">
+          <div class="cp-swatch" style="background:#ff3b30;" data-color="#ff3b30"></div>
+          <div class="cp-swatch" style="background:#ff9500;" data-color="#ff9500"></div>
+          <div class="cp-swatch" style="background:#ffcc00;" data-color="#ffcc00"></div>
+          <div class="cp-swatch" style="background:#34c759;" data-color="#34c759"></div>
+          <div class="cp-swatch" style="background:#5ac8fa;" data-color="#5ac8fa"></div>
+          <div class="cp-swatch" style="background:#007aff;" data-color="#007aff"></div>
+          <div class="cp-swatch" style="background:#af52de;" data-color="#af52de"></div>
+          <div class="cp-swatch" style="background:#ff2d55;" data-color="#ff2d55"></div>
+          <div class="cp-swatch" style="background:#1d1d1f;" data-color="#1d1d1f"></div>
+          <div class="cp-swatch" style="background:#f5f5f7;" data-color="#f5f5f7"></div>
+          <div class="cp-swatch cp-swatch-add" id="cp-save-btn" title="Save current color">+</div>
+        </div>
+        <button class="cp-eyedropper-btn" id="cp-eyedropper">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 22l1-6 13-13a3 3 0 114 4L7 21l-5 1z"/><path d="M15 6l3 3"/></svg>
+          Eyedropper
+        </button>
+      </div>
+    </section>
+
+    <!-- PiP Window -->
+    <div class="pip-window" id="pip-window" style="display:none;">
+      <div class="pip-titlebar" id="pip-titlebar">
+        <div class="pip-controls">
+          <button class="pip-btn pip-close" id="pip-close" title="Close">✕</button>
+          <button class="pip-btn pip-back" id="pip-back" title="Back to App">↩</button>
+        </div>
+      </div>
+      <div class="pip-content">
+        <div class="pip-video-placeholder">
+          <div class="pip-video-animation">
+            <div class="pip-wave pip-wave-1"></div>
+            <div class="pip-wave pip-wave-2"></div>
+            <div class="pip-wave pip-wave-3"></div>
+          </div>
+          <div class="pip-play-btn" id="pip-play-btn">▶</div>
+        </div>
+      </div>
+      <div class="pip-resize-handle" id="pip-resize"></div>
+    </div>
+
+    <!-- Mission Control Overlay (for Hot Corners) -->
+    <div class="mission-control-overlay" id="mission-control-overlay">
+      <div class="mc-header">
+        <div class="mc-desktop-strip">
+          <div class="mc-desktop mc-desktop-active">Desktop 1</div>
+          <div class="mc-desktop">Desktop 2</div>
+          <div class="mc-desktop mc-desktop-add">+</div>
+        </div>
+      </div>
+      <div class="mc-windows" id="mc-windows"></div>
+    </div>
+
+    <!-- Launchpad Overlay (for Hot Corners) -->
+    <div class="launchpad-overlay" id="launchpad-overlay">
+      <div class="launchpad-grid" id="launchpad-grid"></div>
+    </div>
+
     <script src="./app.js"></script>
   </body>
 </html>
