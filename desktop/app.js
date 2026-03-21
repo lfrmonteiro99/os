@@ -2073,4 +2073,454 @@
     window._auroraOpenApp = openAppWindow;
   })();
 
+  /* ── 23. Terminal Emulator ────────────────────────── */
+  (function () {
+    var output = document.getElementById("terminal-output");
+    var input = document.getElementById("terminal-input");
+    var promptEl = document.getElementById("terminal-prompt");
+    if (!output || !input) return;
+
+    // Simple in-browser terminal state
+    var cwd = "/Users/user";
+    var home = "/Users/user";
+    var history = [];
+    var histIdx = -1;
+    var fs = {};
+    var aliases = {};
+    var env = { HOME: home, USER: "user", SHELL: "/bin/zsh" };
+
+    function getPrompt() {
+      var dir = cwd === home ? "~" : cwd.split("/").pop() || "/";
+      return "user@AuroraOS " + dir + " % ";
+    }
+
+    function resolve(p) {
+      if (!p) return cwd;
+      if (p === "~") return home;
+      if (p.startsWith("~/")) return home + p.slice(1);
+      if (p.startsWith("/")) return p;
+      return (cwd === "/" ? "" : cwd) + "/" + p;
+    }
+
+    function appendLine(text, cls) {
+      var div = document.createElement("div");
+      div.className = "terminal-line " + (cls || "");
+      div.textContent = text;
+      output.appendChild(div);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function execute(cmd) {
+      cmd = cmd.trim();
+      if (!cmd) return;
+      if (history[history.length - 1] !== cmd) history.push(cmd);
+      histIdx = history.length;
+      appendLine(getPrompt() + cmd, "terminal-cmd");
+
+      var parts = cmd.split(/\s+/);
+      var c = parts[0], args = parts.slice(1);
+      if (aliases[c]) { c = aliases[c]; }
+
+      var out = "";
+      if (c === "echo") out = args.join(" ");
+      else if (c === "pwd") out = cwd;
+      else if (c === "whoami") out = "user";
+      else if (c === "hostname") out = "AuroraOS";
+      else if (c === "date") out = new Date().toString();
+      else if (c === "clear") { output.innerHTML = ""; return; }
+      else if (c === "cd") {
+        var t = args[0] || home;
+        var r = resolve(t);
+        var s = r.split("/").filter(Boolean);
+        var stack = [];
+        s.forEach(function (p) { if (p === "..") stack.pop(); else if (p !== ".") stack.push(p); });
+        cwd = "/" + stack.join("/");
+        promptEl.textContent = getPrompt();
+        return;
+      }
+      else if (c === "ls") {
+        var dir = resolve(args[0]) || cwd;
+        var prefix = dir === "/" ? "/" : dir + "/";
+        var entries = [];
+        Object.keys(fs).forEach(function (path) {
+          if (path.startsWith(prefix)) {
+            var name = path.slice(prefix.length).split("/")[0];
+            if (name && entries.indexOf(name) === -1) entries.push(name);
+          }
+        });
+        out = entries.sort().join("  ");
+      }
+      else if (c === "touch") { if (args[0]) { var p = resolve(args[0]); if (fs[p] === undefined) fs[p] = ""; } }
+      else if (c === "mkdir") { if (args[0]) fs[resolve(args[0])] = null; }
+      else if (c === "cat") { var p = resolve(args[0]); out = fs[p] !== undefined ? fs[p] : "cat: " + args[0] + ": No such file"; }
+      else if (c === "rm") { var p = resolve(args[0]); if (fs[p] !== undefined) delete fs[p]; else out = "rm: " + args[0] + ": No such file"; }
+      else if (c === "help") out = "Commands: echo, pwd, cd, ls, cat, touch, mkdir, rm, clear, whoami, hostname, date, help";
+      else if (c === "alias") { if (!args[0]) { Object.keys(aliases).forEach(function (k) { appendLine("alias " + k + "='" + aliases[k] + "'", "terminal-output"); }); return; } var eq = args[0].indexOf("="); if (eq > 0) aliases[args[0].slice(0, eq)] = args[0].slice(eq + 1); return; }
+      else { out = "zsh: command not found: " + c; appendLine(out, "terminal-error"); return; }
+
+      if (out) appendLine(out, "terminal-output");
+    }
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { execute(input.value); input.value = ""; promptEl.textContent = getPrompt(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); if (histIdx > 0) { histIdx--; input.value = history[histIdx]; } }
+      else if (e.key === "ArrowDown") { e.preventDefault(); if (histIdx < history.length - 1) { histIdx++; input.value = history[histIdx]; } else { histIdx = history.length; input.value = ""; } }
+    });
+  })();
+
+  /* ── 24. Activity Monitor ────────────────────────── */
+  (function () {
+    var tbody = document.getElementById("activity-tbody");
+    var summary = document.getElementById("activity-summary");
+    if (!tbody) return;
+
+    var processes = [
+      { name: "kernel_task", cpu: 4.2, mem: 512, threads: 180, pid: 0 },
+      { name: "WindowServer", cpu: 8.1, mem: 256, threads: 12, pid: 87 },
+      { name: "Finder", cpu: 1.3, mem: 120, threads: 8, pid: 310 },
+      { name: "Safari", cpu: 12.5, mem: 890, threads: 42, pid: 1024 },
+      { name: "Mail", cpu: 0.8, mem: 145, threads: 6, pid: 1056 },
+      { name: "Messages", cpu: 0.4, mem: 95, threads: 5, pid: 1102 },
+      { name: "Spotlight", cpu: 2.1, mem: 78, threads: 3, pid: 398 },
+      { name: "Activity Monitor", cpu: 3.7, mem: 64, threads: 4, pid: 2200 },
+      { name: "Terminal", cpu: 0.2, mem: 42, threads: 2, pid: 2310 },
+      { name: "Notes", cpu: 0.1, mem: 55, threads: 3, pid: 1540 },
+      { name: "Music", cpu: 5.8, mem: 220, threads: 14, pid: 1600 },
+      { name: "Photos", cpu: 1.0, mem: 310, threads: 9, pid: 1700 },
+    ];
+
+    function render() {
+      tbody.innerHTML = "";
+      processes.forEach(function (p) {
+        var row = document.createElement("div");
+        row.className = "activity-row";
+        row.innerHTML = '<span class="activity-col-name">' + p.name + '</span>' +
+          '<span class="activity-col">' + p.cpu.toFixed(1) + '</span>' +
+          '<span class="activity-col">' + p.mem + ' MB</span>' +
+          '<span class="activity-col">' + p.threads + '</span>' +
+          '<span class="activity-col">' + p.pid + '</span>';
+        tbody.appendChild(row);
+      });
+      var totalCpu = processes.reduce(function (s, p) { return s + p.cpu; }, 0);
+      var totalMem = processes.reduce(function (s, p) { return s + p.mem; }, 0);
+      if (summary) summary.innerHTML = '<span>Processes: ' + processes.length + '</span><span>CPU: ' + totalCpu.toFixed(1) + '%</span><span>Memory: ' + (totalMem / 1024).toFixed(2) + ' GB</span>';
+    }
+    render();
+
+    // Fluctuate values periodically
+    setInterval(function () {
+      processes.forEach(function (p) {
+        p.cpu = Math.max(0, p.cpu + (Math.random() - 0.5) * 2);
+        p.mem = Math.max(10, Math.round(p.mem + (Math.random() - 0.5) * 20));
+      });
+      render();
+    }, 3000);
+  })();
+
+  /* ── 25. Disk Utility ────────────────────────────── */
+  (function () {
+    var sidebar = document.getElementById("disk-sidebar");
+    var detail = document.getElementById("disk-detail");
+    if (!sidebar) return;
+
+    var disks = [
+      { name: "Macintosh HD", type: "internal", fs: "APFS", total: 500, used: 234, smart: "Verified" },
+      { name: "Data", type: "internal", fs: "APFS", total: 500, used: 189, smart: "Verified" },
+      { name: "Backup HD", type: "external", fs: "HFS+", total: 1000, used: 567, smart: "Verified" },
+    ];
+
+    function renderSidebar() {
+      sidebar.innerHTML = "";
+      disks.forEach(function (d, i) {
+        var item = document.createElement("div");
+        item.className = "disk-item" + (i === 0 ? " active" : "");
+        item.innerHTML = '<div class="disk-item-icon"></div><span>' + d.name + '</span>';
+        item.addEventListener("click", function () {
+          sidebar.querySelectorAll(".disk-item").forEach(function (el) { el.classList.remove("active"); });
+          item.classList.add("active");
+          renderDetail(d);
+        });
+        sidebar.appendChild(item);
+      });
+      renderDetail(disks[0]);
+    }
+
+    function renderDetail(d) {
+      var pct = ((d.used / d.total) * 100).toFixed(1);
+      var free = d.total - d.used;
+      detail.innerHTML = '<h3 style="margin:0 0 12px;font-size:16px;">' + d.name + '</h3>' +
+        '<div class="disk-info-row"><span>Type</span><span>' + d.type + '</span></div>' +
+        '<div class="disk-info-row"><span>File System</span><span>' + d.fs + '</span></div>' +
+        '<div class="disk-info-row"><span>SMART Status</span><span style="color:var(--green)">' + d.smart + '</span></div>' +
+        '<div class="disk-bar"><div class="disk-bar-fill" style="width:' + pct + '%;"></div></div>' +
+        '<div class="disk-info-row"><span>Used: ' + d.used + ' GB (' + pct + '%)</span><span>Free: ' + free + ' GB</span></div>' +
+        '<div class="disk-info-row"><span>Total: ' + d.total + ' GB</span></div>';
+    }
+    renderSidebar();
+  })();
+
+  /* ── 26. Font Book ───────────────────────────────── */
+  (function () {
+    var collsEl = document.getElementById("fontbook-collections");
+    var listEl = document.getElementById("fontbook-list");
+    var previewEl = document.querySelector(".fontbook-preview-text");
+    if (!collsEl) return;
+
+    var fonts = [
+      { family: "SF Pro", styles: ["Regular", "Bold", "Light"] },
+      { family: "SF Mono", styles: ["Regular", "Bold"] },
+      { family: "New York", styles: ["Regular", "Bold", "Italic"] },
+      { family: "Helvetica Neue", styles: ["Regular", "Bold", "Light", "UltraLight"] },
+      { family: "Times New Roman", styles: ["Regular", "Bold", "Italic"] },
+      { family: "Courier New", styles: ["Regular", "Bold"] },
+      { family: "Georgia", styles: ["Regular", "Bold", "Italic"] },
+      { family: "Arial", styles: ["Regular", "Bold", "Italic"] },
+      { family: "Menlo", styles: ["Regular", "Bold"] },
+      { family: "Monaco", styles: ["Regular"] },
+    ];
+    var collections = ["All Fonts", "Recently Added", "Fixed Width", "Fun", "Web"];
+
+    function renderCollections() {
+      collsEl.innerHTML = "";
+      collections.forEach(function (c, i) {
+        var el = document.createElement("div");
+        el.className = "fontbook-coll" + (i === 0 ? " active" : "");
+        el.textContent = c;
+        el.addEventListener("click", function () {
+          collsEl.querySelectorAll(".fontbook-coll").forEach(function (e) { e.classList.remove("active"); });
+          el.classList.add("active");
+        });
+        collsEl.appendChild(el);
+      });
+    }
+
+    function renderFonts() {
+      listEl.innerHTML = "";
+      fonts.forEach(function (f) {
+        f.styles.forEach(function (s) {
+          var item = document.createElement("div");
+          item.className = "fontbook-font-item";
+          item.textContent = f.family + " — " + s;
+          item.addEventListener("click", function () {
+            if (previewEl) {
+              previewEl.style.fontFamily = "'" + f.family + "', sans-serif";
+              previewEl.style.fontWeight = s === "Bold" ? "bold" : s === "Light" ? "300" : s === "UltraLight" ? "100" : "normal";
+              previewEl.style.fontStyle = s === "Italic" ? "italic" : "normal";
+            }
+          });
+          listEl.appendChild(item);
+        });
+      });
+    }
+    renderCollections();
+    renderFonts();
+  })();
+
+  /* ── 27. Automator ───────────────────────────────── */
+  (function () {
+    var wfList = document.getElementById("automator-workflows");
+    var addBtn = document.getElementById("automator-add-btn");
+    var detailEl = document.getElementById("automator-detail");
+    if (!wfList) return;
+
+    var workflows = [
+      { name: "Rename Files", steps: 3, lastRun: "Today, 10:32 AM" },
+      { name: "Resize Images", steps: 2, lastRun: "Yesterday" },
+      { name: "Backup Documents", steps: 4, lastRun: "Mar 19" },
+    ];
+
+    function render() {
+      wfList.innerHTML = "";
+      workflows.forEach(function (wf) {
+        var item = document.createElement("div");
+        item.className = "automator-wf-item";
+        item.innerHTML = '<div style="font-weight:500;">' + wf.name + '</div><div style="font-size:11px;color:var(--ink-secondary);">' + wf.steps + ' steps · Last run: ' + wf.lastRun + '</div>';
+        item.addEventListener("click", function () {
+          detailEl.innerHTML = '<h3 style="margin:0 0 12px;font-size:16px;">' + wf.name + '</h3><div style="font-size:12px;color:var(--ink-secondary);">Steps: ' + wf.steps + '</div><div style="margin-top:16px;"><button style="padding:6px 16px;background:var(--green);color:white;border:none;border-radius:6px;cursor:default;">▶ Run</button></div>';
+        });
+        wfList.appendChild(item);
+      });
+    }
+    render();
+
+    if (addBtn) addBtn.addEventListener("click", function () {
+      workflows.push({ name: "New Workflow " + (workflows.length + 1), steps: 0, lastRun: "Never" });
+      render();
+    });
+  })();
+
+  /* ── 28. Time Machine ────────────────────────────── */
+  (function () {
+    var timeline = document.getElementById("tm-timeline");
+    var sublabel = document.getElementById("tm-sublabel");
+    if (!timeline) return;
+
+    var backups = [
+      { time: "Today, 2:00 PM", size: "1.2 GB", label: "Latest" },
+      { time: "Today, 11:00 AM", size: "1.1 GB", label: null },
+      { time: "Yesterday, 5:00 PM", size: "1.3 GB", label: null },
+      { time: "Yesterday, 11:00 AM", size: "980 MB", label: null },
+      { time: "Mar 19, 3:00 PM", size: "1.4 GB", label: "Before update" },
+    ];
+
+    if (sublabel) sublabel.textContent = "Last backup: " + backups[0].time;
+    backups.forEach(function (b) {
+      var entry = document.createElement("div");
+      entry.className = "tm-entry";
+      entry.innerHTML = '<span class="tm-entry-time">' + b.time + '</span>' +
+        '<span class="tm-entry-label">' + (b.label || "Backup") + '</span>' +
+        '<span class="tm-entry-size">' + b.size + '</span>';
+      timeline.appendChild(entry);
+    });
+  })();
+
+  /* ── 29. Network Manager ─────────────────────────── */
+  (function () {
+    var statusEl = document.getElementById("net-status");
+    var listEl = document.getElementById("net-list");
+    if (!statusEl) return;
+
+    statusEl.innerHTML = '<div class="net-status-label">Wi-Fi is connected</div><div class="net-status-sub">Home Network · IP: 192.168.1.42</div>';
+
+    var networks = [
+      { ssid: "Home Network", signal: 4, secure: true, connected: true },
+      { ssid: "Neighbor_5G", signal: 3, secure: true, connected: false },
+      { ssid: "CoffeeShop", signal: 2, secure: false, connected: false },
+      { ssid: "Office-Guest", signal: 1, secure: true, connected: false },
+    ];
+
+    var bars = ["▁", "▁▂", "▁▂▃", "▁▂▃▄"];
+    networks.forEach(function (n) {
+      var item = document.createElement("div");
+      item.className = "net-wifi-item";
+      item.innerHTML = (n.connected ? '<span style="color:var(--blue);font-weight:600;">✓</span>' : '') +
+        '<span>' + n.ssid + '</span>' +
+        (n.secure ? '<span class="net-wifi-lock">🔒</span>' : '') +
+        '<span class="net-wifi-signal">' + bars[n.signal - 1] + '</span>';
+      listEl.appendChild(item);
+    });
+  })();
+
+  /* ── 30. Accessibility ───────────────────────────── */
+  (function () {
+    var toggles = document.querySelectorAll(".a11y-toggle");
+    toggles.forEach(function (t) {
+      t.addEventListener("click", function () { t.classList.toggle("on"); });
+    });
+
+    var fontSlider = document.getElementById("a11y-fontsize");
+    var fontVal = document.getElementById("a11y-fontsize-val");
+    if (fontSlider) fontSlider.addEventListener("input", function () {
+      fontVal.textContent = fontSlider.value + "%";
+    });
+
+    var cursorSlider = document.getElementById("a11y-cursorsize");
+    var cursorVal = document.getElementById("a11y-cursorsize-val");
+    if (cursorSlider) cursorSlider.addEventListener("input", function () {
+      cursorVal.textContent = (cursorSlider.value / 10).toFixed(1) + "x";
+    });
+  })();
+
+  /* ── 31. Finder Tags ─────────────────────────────── */
+  (function () {
+    var sidebar = document.getElementById("tags-sidebar");
+    var filesEl = document.getElementById("tags-files");
+    if (!sidebar) return;
+
+    var tags = [
+      { name: "Red", color: "#ff3b30", files: ["Proposal.pdf", "Urgent.doc"] },
+      { name: "Orange", color: "#ff9500", files: ["Budget.xlsx"] },
+      { name: "Yellow", color: "#ffcc00", files: ["Notes.txt", "Ideas.md", "Draft.doc"] },
+      { name: "Green", color: "#34c759", files: ["Approved.pdf"] },
+      { name: "Blue", color: "#007aff", files: ["Project.zip", "Report.pdf"] },
+      { name: "Purple", color: "#af52de", files: ["Personal.doc"] },
+      { name: "Gray", color: "#8e8e93", files: ["Archive.zip"] },
+    ];
+
+    tags.forEach(function (tag) {
+      var item = document.createElement("div");
+      item.className = "tags-tag-item";
+      item.innerHTML = '<span class="tags-dot" style="background:' + tag.color + ';"></span><span>' + tag.name + '</span>';
+      item.addEventListener("click", function () {
+        sidebar.querySelectorAll(".tags-tag-item").forEach(function (e) { e.classList.remove("active"); });
+        item.classList.add("active");
+        filesEl.innerHTML = "";
+        tag.files.forEach(function (f) {
+          var fi = document.createElement("div");
+          fi.className = "tags-file-item";
+          fi.innerHTML = '<span>📄 ' + f + '</span><div class="tags-file-dots"><span class="tags-dot" style="width:8px;height:8px;background:' + tag.color + ';"></span></div>';
+          filesEl.appendChild(fi);
+        });
+      });
+      sidebar.appendChild(item);
+    });
+  })();
+
+  /* ── 32. Siri Voice Assistant ────────────────────── */
+  (function () {
+    var overlay = document.getElementById("siri-overlay");
+    var input = document.getElementById("siri-input");
+    var response = document.getElementById("siri-response");
+    var suggestionsEl = document.getElementById("siri-suggestions");
+    if (!overlay) return;
+
+    var suggestions = ["What's the weather?", "Open Safari", "Set a timer", "Play music"];
+
+    function showSuggestions() {
+      suggestionsEl.innerHTML = "";
+      suggestions.forEach(function (s) {
+        var el = document.createElement("div");
+        el.className = "siri-suggestion";
+        el.textContent = s;
+        el.addEventListener("click", function () { input.value = s; processQuery(s); });
+        suggestionsEl.appendChild(el);
+      });
+    }
+
+    function processQuery(text) {
+      var lower = text.toLowerCase();
+      var resp = "Here's what I found for \"" + text + "\".";
+      if (lower.match(/weather|temperature/)) resp = "It's currently 18°C and partly cloudy in San Francisco.";
+      else if (lower.match(/time|clock/)) resp = "The time is " + new Date().toLocaleTimeString() + ".";
+      else if (lower.match(/open|launch/)) resp = "Opening " + text.replace(/^(open|launch)\s+/i, "") + "...";
+      else if (lower.match(/timer|remind/)) resp = "I've set that reminder for you.";
+      else if (lower.match(/play|music/)) resp = "Now playing music.";
+      else if (lower.match(/\d+\s*[\+\-\*\/]\s*\d+/)) {
+        try { resp = "The answer is " + eval(text.replace(/[^0-9\+\-\*\/\.]/g, "")) + "."; } catch (e) { resp = "I couldn't calculate that."; }
+      }
+      response.textContent = resp;
+      suggestionsEl.innerHTML = "";
+    }
+
+    // Open Siri: Cmd+Shift+S or click
+    document.addEventListener("keydown", function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        overlay.classList.toggle("visible");
+        if (overlay.classList.contains("visible")) {
+          response.textContent = "What can I help you with?";
+          input.value = "";
+          showSuggestions();
+          setTimeout(function () { input.focus(); }, 100);
+        }
+      }
+      if (e.key === "Escape" && overlay.classList.contains("visible")) {
+        overlay.classList.remove("visible");
+      }
+    });
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && input.value.trim()) {
+        processQuery(input.value.trim());
+        input.value = "";
+      }
+    });
+
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) overlay.classList.remove("visible");
+    });
+
+    showSuggestions();
+  })();
+
 })();
