@@ -1066,4 +1066,521 @@
     });
   })();
 
+  /* ══════════════════════════════════════════════════════
+     13. CLIPBOARD HISTORY (Issue #13)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var clipPanel = document.getElementById("clipboard-panel");
+    var clipList = document.getElementById("clipboard-list");
+    var clipSearchInput = document.getElementById("clipboard-search-input");
+    var clipClearBtn = document.getElementById("clipboard-clear-btn");
+    if (!clipPanel) return;
+
+    // Inline clipboard history logic (mirrors module)
+    var clipHistory = [];
+    var maxClip = 50;
+
+    function clipCopy(content, type, source) {
+      if (!content) return;
+      var idx = clipHistory.findIndex(function (e) { return e.content === content; });
+      if (idx !== -1) clipHistory.splice(idx, 1);
+      clipHistory.unshift({
+        content: content, type: type || "text", source: source || "",
+        timestamp: Date.now(), pinned: false,
+      });
+      while (clipHistory.length > maxClip) {
+        for (var i = clipHistory.length - 1; i >= 0; i--) {
+          if (!clipHistory[i].pinned) { clipHistory.splice(i, 1); break; }
+        }
+      }
+    }
+
+    // Intercept Ctrl+C
+    document.addEventListener("copy", function () {
+      var sel = window.getSelection().toString();
+      if (sel) clipCopy(sel, "text", "Selection");
+    });
+
+    function renderClipboard(filter) {
+      clipList.innerHTML = "";
+      var items = clipHistory;
+      if (filter) {
+        var q = filter.toLowerCase();
+        items = items.filter(function (e) { return e.content.toLowerCase().indexOf(q) !== -1; });
+      }
+      if (items.length === 0) {
+        clipList.innerHTML = '<div class="clipboard-empty">' + (filter ? "No matches" : "No clipboard history yet") + "</div>";
+        return;
+      }
+      items.forEach(function (entry, i) {
+        var el = document.createElement("div");
+        el.className = "clipboard-item";
+        var age = Math.round((Date.now() - entry.timestamp) / 60000);
+        var ageStr = age < 1 ? "now" : age + "m ago";
+        el.innerHTML =
+          '<span class="clipboard-item-pin ' + (entry.pinned ? "pinned" : "") + '" data-idx="' + i + '">📌</span>' +
+          '<div class="clipboard-item-content">' + escapeHtml(entry.content) + "</div>" +
+          '<span class="clipboard-item-meta">' + ageStr + "</span>";
+        el.addEventListener("click", function (e) {
+          if (e.target.classList.contains("clipboard-item-pin")) {
+            entry.pinned = !entry.pinned;
+            renderClipboard(filter);
+            return;
+          }
+          // Copy to clipboard
+          navigator.clipboard.writeText(entry.content).catch(function () {});
+          clipPanel.classList.remove("visible");
+        });
+        clipList.appendChild(el);
+      });
+    }
+
+    function escapeHtml(s) {
+      var d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // Toggle clipboard panel: Ctrl+Shift+V
+    document.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.shiftKey && e.key === "V") {
+        e.preventDefault();
+        clipPanel.classList.toggle("visible");
+        if (clipPanel.classList.contains("visible")) {
+          renderClipboard();
+          setTimeout(function () { clipSearchInput.focus(); }, 50);
+        }
+      }
+    });
+
+    clipSearchInput.addEventListener("input", function () {
+      renderClipboard(this.value);
+    });
+
+    clipClearBtn.addEventListener("click", function () {
+      clipHistory = clipHistory.filter(function (e) { return e.pinned; });
+      renderClipboard();
+    });
+
+    // Close on outside click
+    document.addEventListener("click", function (e) {
+      if (clipPanel.classList.contains("visible") && !clipPanel.contains(e.target)) {
+        clipPanel.classList.remove("visible");
+      }
+    });
+
+    // Seed some demo entries
+    clipCopy("Hello, world!", "text", "TextEdit");
+    clipCopy("https://auroraos.dev", "link", "Safari");
+    clipCopy("npm install auroraos-sdk", "text", "Terminal");
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     14. NOTIFICATION CENTER (Issue #52)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var notifPanel = document.getElementById("notif-panel");
+    var notifList = document.getElementById("notif-list");
+    var notifBadge = document.getElementById("notif-badge");
+    var notifClearAll = document.getElementById("notif-clear-all");
+    var notifDndBtn = document.getElementById("notif-dnd-btn");
+    if (!notifPanel) return;
+
+    var notifications = [];
+    var nextId = 1;
+    var dnd = false;
+
+    function addNotif(app, icon, title, body, actions) {
+      notifications.unshift({
+        id: nextId++, app: app, icon: icon, title: title,
+        body: body, actions: actions || [], read: false, timestamp: Date.now(),
+      });
+      updateBadge();
+      renderNotifs();
+    }
+
+    function updateBadge() {
+      var unread = notifications.filter(function (n) { return !n.read; }).length;
+      if (unread > 0) {
+        notifBadge.style.display = "";
+        notifBadge.textContent = unread;
+      } else {
+        notifBadge.style.display = "none";
+      }
+    }
+
+    function timeAgo(ts) {
+      var m = Math.round((Date.now() - ts) / 60000);
+      if (m < 1) return "now";
+      if (m < 60) return m + "m";
+      return Math.round(m / 60) + "h";
+    }
+
+    function renderNotifs() {
+      notifList.innerHTML = "";
+      if (notifications.length === 0) {
+        notifList.innerHTML = '<div class="notif-empty">No new notifications</div>';
+        return;
+      }
+      // Group by app
+      var groups = {};
+      notifications.forEach(function (n) {
+        if (!groups[n.app]) groups[n.app] = [];
+        groups[n.app].push(n);
+      });
+      Object.keys(groups).forEach(function (app) {
+        var header = document.createElement("div");
+        header.className = "notif-group-header";
+        header.innerHTML = "<span>" + app + " (" + groups[app].length + ")</span>";
+        var clearGrp = document.createElement("button");
+        clearGrp.className = "notif-group-clear";
+        clearGrp.textContent = "Clear";
+        clearGrp.addEventListener("click", function () {
+          notifications = notifications.filter(function (n) { return n.app !== app; });
+          updateBadge();
+          renderNotifs();
+        });
+        header.appendChild(clearGrp);
+        notifList.appendChild(header);
+
+        groups[app].forEach(function (n) {
+          var card = document.createElement("div");
+          card.className = "notif-card";
+          var actionsHtml = "";
+          if (n.actions.length) {
+            actionsHtml = '<div class="notif-card-actions">' +
+              n.actions.map(function (a) { return '<button class="notif-action-btn" data-action="' + a + '">' + a + '</button>'; }).join("") +
+              "</div>";
+          }
+          card.innerHTML =
+            '<div class="notif-card-top">' +
+              '<span class="notif-card-icon">' + n.icon + '</span>' +
+              '<div class="notif-card-body"><div class="notif-card-title">' + n.title + '</div><div class="notif-card-text">' + n.body + '</div></div>' +
+              '<span class="notif-card-time">' + timeAgo(n.timestamp) + '</span>' +
+            '</div>' + actionsHtml;
+          card.addEventListener("click", function (e) {
+            if (e.target.classList.contains("notif-action-btn")) {
+              n.read = true;
+              updateBadge();
+              renderNotifs();
+              return;
+            }
+            n.read = true;
+            updateBadge();
+          });
+          notifList.appendChild(card);
+        });
+      });
+    }
+
+    // Open notification panel from bell area (reuse cc-toggle area)
+    // We'll use a dedicated button — add click to the clock to also toggle notifs
+    var notifToggle = document.getElementById("cc-toggle");
+    notifToggle.addEventListener("dblclick", function (e) {
+      e.stopPropagation();
+      notifPanel.classList.toggle("visible");
+      widgetsPanel.classList.remove("visible");
+    });
+
+    notifClearAll.addEventListener("click", function () {
+      notifications = [];
+      updateBadge();
+      renderNotifs();
+    });
+
+    notifDndBtn.addEventListener("click", function () {
+      dnd = !dnd;
+      notifDndBtn.classList.toggle("active", dnd);
+    });
+
+    // Close on outside click
+    document.addEventListener("click", function (e) {
+      if (notifPanel.classList.contains("visible") &&
+          !notifPanel.contains(e.target) && e.target !== notifToggle) {
+        notifPanel.classList.remove("visible");
+      }
+    });
+
+    // Seed demo notifications
+    setTimeout(function () {
+      addNotif("Messages", "💬", "John Appleseed", "Hey! The new build looks great", ["Reply", "Mark as Read"]);
+      addNotif("Mail", "✉️", "Weekly Report", "Your weekly summary is ready to view", ["Open", "Archive"]);
+      addNotif("Calendar", "📅", "Team Standup", "Starting in 15 minutes", ["Join", "Snooze"]);
+      addNotif("Messages", "💬", "Sarah Connor", "Can you review the PR?", ["Reply"]);
+      addNotif("App Store", "🏪", "Update Available", "AuroraOS 2.1 is ready to install", ["Update"]);
+    }, 500);
+
+    renderNotifs();
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     15. SCREENSHOT TOOL (Issue #12)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var ssOverlay = document.getElementById("screenshot-overlay");
+    var ssToolbar = document.getElementById("screenshot-toolbar");
+    var ssCaptureBtn = document.getElementById("ss-capture-btn");
+    var ssCancelBtn = document.getElementById("ss-cancel-btn");
+    var ssSelection = document.getElementById("screenshot-selection");
+    var ssThumb = document.getElementById("screenshot-thumb");
+    if (!ssOverlay) return;
+
+    var ssMode = "fullscreen";
+    var ssSelecting = false;
+    var ssStart = { x: 0, y: 0 };
+
+    // Mode buttons
+    document.querySelectorAll("[data-ss-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        document.querySelectorAll("[data-ss-mode]").forEach(function (b) { b.classList.remove("ss-mode-active"); });
+        btn.classList.add("ss-mode-active");
+        ssMode = btn.dataset.ssMode;
+      });
+    });
+
+    // Open screenshot tool: Ctrl+Shift+5 (macOS-like combo)
+    document.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.shiftKey && e.key === "5") {
+        e.preventDefault();
+        ssOverlay.classList.toggle("visible");
+      }
+      // Quick fullscreen: Ctrl+Shift+3
+      if (e.ctrlKey && e.shiftKey && e.key === "3") {
+        e.preventDefault();
+        doCapture("fullscreen");
+      }
+      // Quick selection: Ctrl+Shift+4
+      if (e.ctrlKey && e.shiftKey && e.key === "4") {
+        e.preventDefault();
+        ssMode = "selection";
+        ssOverlay.classList.add("visible");
+        document.querySelectorAll("[data-ss-mode]").forEach(function (b) { b.classList.remove("ss-mode-active"); });
+        var selBtn = document.querySelector('[data-ss-mode="selection"]');
+        if (selBtn) selBtn.classList.add("ss-mode-active");
+      }
+    });
+
+    // Selection drag
+    ssOverlay.addEventListener("mousedown", function (e) {
+      if (ssMode !== "selection") return;
+      if (ssToolbar.contains(e.target)) return;
+      ssSelecting = true;
+      ssStart.x = e.clientX;
+      ssStart.y = e.clientY;
+      ssSelection.style.display = "block";
+      ssSelection.style.left = e.clientX + "px";
+      ssSelection.style.top = e.clientY + "px";
+      ssSelection.style.width = "0";
+      ssSelection.style.height = "0";
+    });
+    ssOverlay.addEventListener("mousemove", function (e) {
+      if (!ssSelecting) return;
+      var x = Math.min(e.clientX, ssStart.x);
+      var y = Math.min(e.clientY, ssStart.y);
+      var w = Math.abs(e.clientX - ssStart.x);
+      var h = Math.abs(e.clientY - ssStart.y);
+      ssSelection.style.left = x + "px";
+      ssSelection.style.top = y + "px";
+      ssSelection.style.width = w + "px";
+      ssSelection.style.height = h + "px";
+      // Show dimensions
+      var dims = ssSelection.querySelector(".ss-dims");
+      if (!dims) {
+        dims = document.createElement("div");
+        dims.className = "ss-dims";
+        ssSelection.appendChild(dims);
+      }
+      dims.textContent = w + " × " + h;
+    });
+    ssOverlay.addEventListener("mouseup", function () {
+      if (ssSelecting) {
+        ssSelecting = false;
+        doCapture("selection");
+      }
+    });
+
+    // Capture button
+    ssCaptureBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      doCapture(ssMode);
+    });
+
+    ssCancelBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      ssOverlay.classList.remove("visible");
+      ssSelection.style.display = "none";
+    });
+
+    function doCapture(mode) {
+      ssOverlay.classList.remove("visible");
+      ssSelection.style.display = "none";
+
+      // Flash
+      var flash = document.createElement("div");
+      flash.className = "screenshot-flash";
+      document.body.appendChild(flash);
+      setTimeout(function () { flash.remove(); }, 500);
+
+      // Show thumbnail
+      ssThumb.classList.add("visible");
+      setTimeout(function () { ssThumb.classList.remove("visible"); }, 4000);
+    }
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     16. GLOBAL UNDO/REDO (Issue #65)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    // Per-window undo stacks
+    var undoStacks = {};
+
+    function getStack(winId) {
+      if (!undoStacks[winId]) {
+        undoStacks[winId] = { undo: [], redo: [] };
+      }
+      return undoStacks[winId];
+    }
+
+    function pushUndo(winId, action) {
+      var s = getStack(winId);
+      s.undo.push(action);
+      s.redo = [];
+      if (s.undo.length > 100) s.undo.shift();
+    }
+
+    // Ctrl+Z / Ctrl+Y
+    document.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        var focused = document.querySelector(".window.focused");
+        if (!focused) return;
+        var winId = focused.dataset.window || "default";
+        var s = getStack(winId);
+        if (s.undo.length > 0) {
+          var action = s.undo.pop();
+          s.redo.push(action);
+          if (action.undo) action.undo();
+        }
+      }
+      if (e.ctrlKey && (e.key === "y" || (e.shiftKey && e.key === "Z"))) {
+        e.preventDefault();
+        var focused = document.querySelector(".window.focused");
+        if (!focused) return;
+        var winId = focused.dataset.window || "default";
+        var s = getStack(winId);
+        if (s.redo.length > 0) {
+          var action = s.redo.pop();
+          s.undo.push(action);
+          if (action.redo) action.redo();
+        }
+      }
+    });
+
+    // Update Edit menu to show Undo/Redo state
+    var editMenu = menuData["Edit"];
+    if (editMenu) {
+      menuData["Edit"] = ["Undo  ⌘Z", "Redo  ⌘⇧Z", "---", "Cut", "Copy", "Paste", "Select All"];
+    }
+
+    // Make undo available globally
+    window._auroraUndo = { push: pushUndo, getStack: getStack };
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     17. SHARE SHEET (Issue #56)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var shareOverlay = document.getElementById("share-overlay");
+    var shareSheet = document.getElementById("share-sheet");
+    var shareCloseBtn = document.getElementById("share-close-btn");
+    var shareTargets = document.getElementById("share-targets");
+    var sharePreview = document.getElementById("share-preview");
+    if (!shareOverlay) return;
+
+    var targets = [
+      { name: "AirDrop", icon: "📡", bg: "#007aff" },
+      { name: "Messages", icon: "💬", bg: "#34c759" },
+      { name: "Mail", icon: "✉️", bg: "#007aff" },
+      { name: "Notes", icon: "📝", bg: "#ffd60a" },
+      { name: "Reminders", icon: "☑️", bg: "#ff9500" },
+      { name: "Photos", icon: "🖼️", bg: "#ff2d55" },
+      { name: "Twitter", icon: "🐦", bg: "#1da1f2" },
+      { name: "Facebook", icon: "📘", bg: "#1877f2" },
+    ];
+
+    // Render targets
+    targets.forEach(function (t) {
+      var el = document.createElement("div");
+      el.className = "share-target";
+      el.innerHTML =
+        '<div class="share-target-icon" style="background:' + t.bg + ';">' + t.icon + '</div>' +
+        '<span class="share-target-label">' + t.name + '</span>';
+      el.addEventListener("click", function () {
+        shareOverlay.classList.remove("visible");
+        // Show brief confirmation
+        var indicator = document.getElementById("hot-corners-indicator");
+        if (indicator) {
+          indicator.textContent = "Shared to " + t.name;
+          indicator.classList.add("visible");
+          setTimeout(function () { indicator.classList.remove("visible"); }, 1500);
+        }
+      });
+      shareTargets.appendChild(el);
+    });
+
+    // Open share sheet from right-click context menu
+    // Add "Share…" to context menu items
+    var ctxItems = document.querySelector(".desktop");
+    if (ctxItems) {
+      ctxItems.addEventListener("contextmenu", function () {
+        setTimeout(function () {
+          var menu = document.querySelector(".context-menu");
+          if (menu && !menu.querySelector(".share-ctx-item")) {
+            var sep = document.createElement("div");
+            sep.className = "menu-dropdown-sep";
+            menu.appendChild(sep);
+            var shareItem = document.createElement("div");
+            shareItem.className = "menu-dropdown-item share-ctx-item";
+            shareItem.textContent = "Share\u2026";
+            shareItem.addEventListener("click", function () {
+              menu.remove();
+              openShareSheet("Selected content from desktop");
+            });
+            menu.appendChild(shareItem);
+          }
+        }, 10);
+      });
+    }
+
+    function openShareSheet(content) {
+      sharePreview.textContent = content || "";
+      shareOverlay.classList.add("visible");
+    }
+
+    shareCloseBtn.addEventListener("click", function () {
+      shareOverlay.classList.remove("visible");
+    });
+
+    shareOverlay.addEventListener("click", function (e) {
+      if (e.target === shareOverlay) shareOverlay.classList.remove("visible");
+    });
+
+    // Share action items
+    document.querySelectorAll("[data-share-action]").forEach(function (item) {
+      item.addEventListener("click", function () {
+        shareOverlay.classList.remove("visible");
+        var indicator = document.getElementById("hot-corners-indicator");
+        if (indicator) {
+          indicator.textContent = "Action completed";
+          indicator.classList.add("visible");
+          setTimeout(function () { indicator.classList.remove("visible"); }, 1200);
+        }
+      });
+    });
+
+    // Expose for external use
+    window._auroraShare = { open: openShareSheet };
+  })();
+
 })();

@@ -641,6 +641,90 @@
       <div class="launchpad-grid" id="launchpad-grid"></div>
     </div>
 
+    <!-- Clipboard History Panel (Issue #13) -->
+    <div class="clipboard-panel" id="clipboard-panel">
+      <div class="clipboard-header">
+        <h3>Clipboard History</h3>
+        <button class="clipboard-clear-btn" id="clipboard-clear-btn">Clear</button>
+      </div>
+      <div class="clipboard-search">
+        <input type="text" id="clipboard-search-input" placeholder="Search clipboard..." />
+      </div>
+      <div class="clipboard-list" id="clipboard-list">
+        <div class="clipboard-empty">No clipboard history yet</div>
+      </div>
+    </div>
+
+    <!-- Notification Center Panel (Issue #52) -->
+    <div class="notif-panel" id="notif-panel">
+      <div class="notif-header">
+        <h3>Notifications</h3>
+        <div class="notif-header-actions">
+          <button class="notif-dnd-btn" id="notif-dnd-btn" title="Do Not Disturb">🌙</button>
+          <button class="notif-clear-btn" id="notif-clear-all">Clear All</button>
+        </div>
+      </div>
+      <div class="notif-list" id="notif-list">
+        <div class="notif-empty">No new notifications</div>
+      </div>
+      <div class="notif-badge" id="notif-badge" style="display:none;">0</div>
+    </div>
+
+    <!-- Screenshot Overlay (Issue #12) -->
+    <div class="screenshot-overlay" id="screenshot-overlay">
+      <div class="screenshot-toolbar" id="screenshot-toolbar">
+        <button class="ss-mode-btn ss-mode-active" data-ss-mode="fullscreen" title="Capture Entire Screen">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        </button>
+        <button class="ss-mode-btn" data-ss-mode="selection" title="Capture Selected Portion">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="6" width="12" height="12" rx="1" stroke-dasharray="3 2"/></svg>
+        </button>
+        <button class="ss-mode-btn" data-ss-mode="window" title="Capture Selected Window">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18"/><circle cx="6" cy="5.5" r="1" fill="currentColor"/><circle cx="9" cy="5.5" r="1" fill="currentColor"/></svg>
+        </button>
+        <div class="ss-sep"></div>
+        <button class="ss-mode-btn" data-ss-mode="record" title="Record Screen">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#ff3b30"/></svg>
+        </button>
+        <div class="ss-sep"></div>
+        <button class="ss-capture-btn" id="ss-capture-btn">Capture</button>
+        <button class="ss-cancel-btn" id="ss-cancel-btn">✕</button>
+      </div>
+      <div class="screenshot-selection" id="screenshot-selection"></div>
+    </div>
+
+    <!-- Screenshot Thumbnail Preview -->
+    <div class="screenshot-thumb" id="screenshot-thumb">
+      <div class="screenshot-thumb-img" id="screenshot-thumb-img"></div>
+      <div class="screenshot-thumb-label">Screenshot saved</div>
+    </div>
+
+    <!-- Share Sheet Overlay (Issue #56) -->
+    <div class="share-overlay" id="share-overlay">
+      <div class="share-sheet" id="share-sheet">
+        <div class="share-header">
+          <h3>Share</h3>
+          <button class="share-close-btn" id="share-close-btn">✕</button>
+        </div>
+        <div class="share-preview" id="share-preview"></div>
+        <div class="share-targets" id="share-targets"></div>
+        <div class="share-actions">
+          <div class="share-action-item" data-share-action="copy-link">
+            <div class="share-action-icon">🔗</div>
+            <span>Copy Link</span>
+          </div>
+          <div class="share-action-item" data-share-action="save-pdf">
+            <div class="share-action-icon">📄</div>
+            <span>Save as PDF</span>
+          </div>
+          <div class="share-action-item" data-share-action="add-reading-list">
+            <div class="share-action-icon">📖</div>
+            <span>Reading List</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="./app.js"></script>
   </body>
 </html>
