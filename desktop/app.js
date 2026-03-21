@@ -1583,4 +1583,477 @@
     window._auroraShare = { open: openShareSheet };
   })();
 
+  /* ══════════════════════════════════════════════════════
+     18. KEYCHAIN / PASSWORD MANAGER (Issue #58)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var kcList = document.getElementById("kc-list");
+    var kcSearch = document.getElementById("kc-search");
+    var kcAddBtn = document.getElementById("kc-add-btn");
+    if (!kcList) return;
+
+    var entries = [
+      { id: 1, name: "GitHub", account: "user@mail.com", password: "Gh$tr0ng!Pass9", url: "github.com", category: "password" },
+      { id: 2, name: "Netflix", account: "user@mail.com", password: "Nfl1x#2026", url: "netflix.com", category: "password" },
+      { id: 3, name: "Apple ID", account: "user@icloud.com", password: "Ap!D_Str0nG#7", url: "apple.com", category: "password" },
+      { id: 4, name: "AWS API Key", notes: "AKIA...redacted", category: "secure-note" },
+      { id: 5, name: "SSH Key", account: "id_rsa", category: "key" },
+      { id: 6, name: "Google", account: "user@gmail.com", password: "g00gL3!", url: "google.com", category: "password" },
+    ];
+    var activeCategory = "password";
+    var nextId = 7;
+
+    function evalStrength(pw) {
+      if (!pw || pw.length < 6) return "weak";
+      var score = 0;
+      if (pw.length >= 8) score++;
+      if (pw.length >= 12) score++;
+      if (/[A-Z]/.test(pw)) score++;
+      if (/[a-z]/.test(pw)) score++;
+      if (/[0-9]/.test(pw)) score++;
+      if (/[^a-zA-Z0-9]/.test(pw)) score++;
+      return score <= 2 ? "weak" : score <= 4 ? "medium" : "strong";
+    }
+
+    function renderKc(filter) {
+      kcList.innerHTML = "";
+      var items = entries.filter(function (e) { return e.category === activeCategory; });
+      if (filter) {
+        var q = filter.toLowerCase();
+        items = items.filter(function (e) {
+          return e.name.toLowerCase().indexOf(q) !== -1 ||
+                 (e.account && e.account.toLowerCase().indexOf(q) !== -1);
+        });
+      }
+      if (items.length === 0) {
+        kcList.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px;">No entries</div>';
+        return;
+      }
+      items.forEach(function (entry) {
+        var el = document.createElement("div");
+        el.className = "kc-entry";
+        var icon = entry.category === "password" ? "🔑" : entry.category === "secure-note" ? "📝" : entry.category === "certificate" ? "📜" : "🔐";
+        var strengthHtml = "";
+        if (entry.password) {
+          var s = evalStrength(entry.password);
+          strengthHtml = '<span class="kc-entry-strength kc-strength-' + s + '">' + s + "</span>";
+        }
+        el.innerHTML = '<span class="kc-entry-icon">' + icon + "</span>" +
+          '<div class="kc-entry-info"><div class="kc-entry-name">' + entry.name + '</div><div class="kc-entry-account">' + (entry.account || entry.notes || "") + "</div></div>" +
+          strengthHtml;
+        kcList.appendChild(el);
+      });
+    }
+
+    document.querySelectorAll("[data-kc-cat]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll("[data-kc-cat]").forEach(function (b) { b.classList.remove("kc-cat-active"); });
+        btn.classList.add("kc-cat-active");
+        activeCategory = btn.dataset.kcCat;
+        renderKc(kcSearch.value);
+      });
+    });
+
+    kcSearch.addEventListener("input", function () { renderKc(this.value); });
+
+    kcAddBtn.addEventListener("click", function () {
+      var name = prompt("Entry name:");
+      if (!name) return;
+      var account = prompt("Account/Username:") || "";
+      var pw = prompt("Password (or leave empty):") || "";
+      entries.push({ id: nextId++, name: name, account: account, password: pw, url: "", category: activeCategory });
+      renderKc(kcSearch.value);
+    });
+
+    renderKc();
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     19. REMINDERS / TO-DO (Issue #29)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var remTaskList = document.getElementById("rem-task-list");
+    var remAddTaskBtn = document.getElementById("rem-add-task-btn");
+    var remSort = document.getElementById("rem-sort");
+    var remLists = document.getElementById("rem-lists");
+    var remAddListBtn = document.getElementById("rem-add-list-btn");
+    if (!remTaskList) return;
+
+    var lists = [{ id: 1, name: "Reminders", color: "#007aff" }];
+    var tasks = [
+      { id: 1, title: "Review AuroraOS design docs", notes: "", dueDate: "2026-03-21", completed: false, completedAt: null, flagged: true, priority: "high", listId: 1 },
+      { id: 2, title: "Buy groceries", notes: "Milk, eggs, bread", dueDate: "2026-03-22", completed: false, completedAt: null, flagged: false, priority: "medium", listId: 1 },
+      { id: 3, title: "Call dentist", notes: "", dueDate: null, completed: false, completedAt: null, flagged: false, priority: "low", listId: 1 },
+      { id: 4, title: "Finish Rust book chapter 12", notes: "", dueDate: "2026-03-25", completed: true, completedAt: Date.now(), flagged: false, priority: "none", listId: 1 },
+      { id: 5, title: "Ship v2.0 release", notes: "Final QA pass", dueDate: "2026-04-01", completed: false, completedAt: null, flagged: true, priority: "high", listId: 1 },
+    ];
+    var nextTaskId = 6;
+    var nextListId = 2;
+    var currentView = "all";
+
+    function getViewTasks() {
+      var today = new Date().toISOString().split("T")[0];
+      if (currentView === "today") return tasks.filter(function (t) { return t.dueDate === today && !t.completed; });
+      if (currentView === "scheduled") return tasks.filter(function (t) { return t.dueDate && !t.completed; });
+      if (currentView === "flagged") return tasks.filter(function (t) { return t.flagged && !t.completed; });
+      if (currentView === "completed") return tasks.filter(function (t) { return t.completed; });
+      return tasks.filter(function (t) { return !t.completed; });
+    }
+
+    function sortTasksList(arr, by) {
+      var pOrder = { high: 0, medium: 1, low: 2, none: 3 };
+      if (by === "priority") arr.sort(function (a, b) { return (pOrder[a.priority] || 3) - (pOrder[b.priority] || 3); });
+      else if (by === "dueDate") arr.sort(function (a, b) { return (a.dueDate || "9999").localeCompare(b.dueDate || "9999"); });
+      else if (by === "title") arr.sort(function (a, b) { return a.title.localeCompare(b.title); });
+      return arr;
+    }
+
+    function renderTasks() {
+      remTaskList.innerHTML = "";
+      var viewTasks = getViewTasks();
+      var sortBy = remSort.value;
+      if (sortBy !== "default") viewTasks = sortTasksList(viewTasks, sortBy);
+      if (viewTasks.length === 0) {
+        remTaskList.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px;">No reminders</div>';
+        return;
+      }
+      viewTasks.forEach(function (task) {
+        var el = document.createElement("div");
+        el.className = "rem-task";
+        var priClass = task.priority !== "none" ? " rem-priority-" + task.priority : "";
+        el.innerHTML =
+          '<div class="rem-checkbox' + (task.completed ? " checked" : "") + '" data-id="' + task.id + '">' + (task.completed ? "✓" : "") + '</div>' +
+          '<div class="rem-task-body"><div class="rem-task-title' + (task.completed ? " completed" : "") + priClass + '">' + task.title + '</div>' +
+          '<div class="rem-task-meta">' +
+            (task.dueDate ? "<span>📅 " + task.dueDate + "</span>" : "") +
+            (task.priority !== "none" ? "<span>⚡ " + task.priority + "</span>" : "") +
+          '</div></div>' +
+          '<span class="rem-task-flag" data-flag="' + task.id + '">' + (task.flagged ? "🚩" : "⚐") + "</span>";
+
+        el.querySelector(".rem-checkbox").addEventListener("click", function () {
+          task.completed = !task.completed;
+          task.completedAt = task.completed ? Date.now() : null;
+          renderTasks();
+        });
+        el.querySelector(".rem-task-flag").addEventListener("click", function () {
+          task.flagged = !task.flagged;
+          renderTasks();
+        });
+        remTaskList.appendChild(el);
+      });
+    }
+
+    document.querySelectorAll("[data-rem-view]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll("[data-rem-view]").forEach(function (b) { b.classList.remove("rem-smart-active"); });
+        btn.classList.add("rem-smart-active");
+        currentView = btn.dataset.remView;
+        renderTasks();
+      });
+    });
+
+    remSort.addEventListener("change", renderTasks);
+
+    remAddTaskBtn.addEventListener("click", function () {
+      var title = prompt("Reminder title:");
+      if (!title) return;
+      tasks.push({ id: nextTaskId++, title: title, notes: "", dueDate: null, completed: false, completedAt: null, flagged: false, priority: "none", listId: 1 });
+      renderTasks();
+    });
+
+    renderTasks();
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     20. CALENDAR EVENT MANAGER (Issue #34)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var calGrid = document.getElementById("cal-grid-full");
+    var calLabel = document.getElementById("cal-month-label");
+    var calPrev = document.getElementById("cal-prev");
+    var calNext = document.getElementById("cal-next");
+    var calGoToday = document.getElementById("cal-go-today");
+    var calAddEvent = document.getElementById("cal-add-event");
+    var calDayTitle = document.getElementById("cal-day-title");
+    var calDayEvents = document.getElementById("cal-day-events");
+    if (!calGrid) return;
+
+    var calYear = 2026, calMonth = 2; // March (0-indexed)
+    var calEvents = [
+      { id: 1, title: "Team Standup", date: "2026-03-21", startTime: "09:00", endTime: "09:30", color: "#007aff" },
+      { id: 2, title: "Design Review", date: "2026-03-21", startTime: "14:00", endTime: "15:00", color: "#34c759" },
+      { id: 3, title: "Lunch with Sarah", date: "2026-03-22", startTime: "12:30", endTime: "13:30", color: "#ff9500" },
+      { id: 4, title: "Sprint Planning", date: "2026-03-24", startTime: "10:00", endTime: "11:30", color: "#af52de" },
+      { id: 5, title: "AuroraOS Beta Release", date: "2026-03-28", allDay: true, color: "#ff3b30" },
+    ];
+    var calNextId = 6;
+    var selectedDate = null;
+    var MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"];
+
+    function renderCalendar() {
+      calGrid.innerHTML = "";
+      calLabel.textContent = MONTH_NAMES[calMonth] + " " + calYear;
+      var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      dayNames.forEach(function (d) {
+        var h = document.createElement("div");
+        h.className = "cal-grid-header";
+        h.textContent = d;
+        calGrid.appendChild(h);
+      });
+      var firstDay = new Date(calYear, calMonth, 1).getDay();
+      var daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+      var prevDays = new Date(calYear, calMonth, 0).getDate();
+      var today = new Date();
+      var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+      var prefix = calYear + "-" + String(calMonth + 1).padStart(2, "0") + "-";
+
+      // Fill previous month
+      for (var i = firstDay - 1; i >= 0; i--) {
+        var cell = document.createElement("div");
+        cell.className = "cal-grid-cell other-month";
+        cell.innerHTML = '<div class="cal-cell-num">' + (prevDays - i) + "</div>";
+        calGrid.appendChild(cell);
+      }
+      // Fill current month
+      for (var d = 1; d <= daysInMonth; d++) {
+        var dateStr = prefix + String(d).padStart(2, "0");
+        var cell = document.createElement("div");
+        var cls = "cal-grid-cell";
+        if (dateStr === todayStr) cls += " today";
+        if (dateStr === selectedDate) cls += " selected";
+        cell.className = cls;
+        var hasEvents = calEvents.some(function (e) { return e.date === dateStr; });
+        cell.innerHTML = '<div class="cal-cell-num">' + d + "</div>" + (hasEvents ? '<span class="cal-cell-dot"></span>' : "");
+        cell.dataset.date = dateStr;
+        cell.addEventListener("click", function () {
+          selectedDate = this.dataset.date;
+          renderCalendar();
+          renderDayDetail(this.dataset.date);
+        });
+        calGrid.appendChild(cell);
+      }
+      // Fill next month
+      var total = firstDay + daysInMonth;
+      var remaining = (7 - (total % 7)) % 7;
+      for (var i = 1; i <= remaining; i++) {
+        var cell = document.createElement("div");
+        cell.className = "cal-grid-cell other-month";
+        cell.innerHTML = '<div class="cal-cell-num">' + i + "</div>";
+        calGrid.appendChild(cell);
+      }
+    }
+
+    function renderDayDetail(date) {
+      var parts = date.split("-");
+      var dayDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      var dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      calDayTitle.textContent = dayNames[dayDate.getDay()] + ", " + MONTH_NAMES[parseInt(parts[1]) - 1] + " " + parseInt(parts[2]);
+      calDayEvents.innerHTML = "";
+      var evts = calEvents.filter(function (e) { return e.date === date; });
+      if (evts.length === 0) {
+        calDayEvents.innerHTML = '<div class="cal-event-empty">No events</div>';
+        return;
+      }
+      evts.forEach(function (ev) {
+        var card = document.createElement("div");
+        card.className = "cal-event-card";
+        card.style.borderColor = ev.color || "var(--blue)";
+        card.innerHTML = '<div class="cal-event-title">' + ev.title + "</div>" +
+          (ev.startTime ? '<div class="cal-event-time">' + ev.startTime + " - " + ev.endTime + "</div>" : '<div class="cal-event-time">All day</div>');
+        calDayEvents.appendChild(card);
+      });
+    }
+
+    calPrev.addEventListener("click", function () {
+      calMonth--;
+      if (calMonth < 0) { calMonth = 11; calYear--; }
+      renderCalendar();
+    });
+    calNext.addEventListener("click", function () {
+      calMonth++;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      renderCalendar();
+    });
+    calGoToday.addEventListener("click", function () {
+      var now = new Date();
+      calYear = now.getFullYear();
+      calMonth = now.getMonth();
+      selectedDate = calYear + "-" + String(calMonth + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+      renderCalendar();
+      renderDayDetail(selectedDate);
+    });
+    calAddEvent.addEventListener("click", function () {
+      if (!selectedDate) { alert("Select a date first"); return; }
+      var title = prompt("Event title:");
+      if (!title) return;
+      var time = prompt("Start time (HH:MM) or leave empty for all-day:") || "";
+      var ev = { id: calNextId++, title: title, date: selectedDate, color: "#007aff" };
+      if (time) {
+        ev.startTime = time;
+        ev.endTime = prompt("End time (HH:MM):") || time;
+      } else {
+        ev.allDay = true;
+      }
+      calEvents.push(ev);
+      renderCalendar();
+      renderDayDetail(selectedDate);
+    });
+
+    renderCalendar();
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     21. STARTUP ITEMS MANAGER (Issue #57)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var startupList = document.getElementById("startup-list");
+    var startupAddBtn = document.getElementById("startup-add-btn");
+    var startupRemoveBtn = document.getElementById("startup-remove-btn");
+    if (!startupList) return;
+
+    var items = [
+      { id: 1, name: "Safari", type: "app", enabled: true, hidden: false },
+      { id: 2, name: "Mail", type: "app", enabled: true, hidden: false },
+      { id: 3, name: "Messages", type: "app", enabled: false, hidden: false },
+      { id: 4, name: "Cloud Sync", type: "background", enabled: true, hidden: true },
+      { id: 5, name: "Spotlight Indexer", type: "agent", enabled: true, hidden: true },
+    ];
+    var nextId = 6;
+    var selectedId = null;
+
+    function renderStartup() {
+      startupList.innerHTML = "";
+      items.forEach(function (item) {
+        var el = document.createElement("div");
+        el.className = "startup-item" + (item.id === selectedId ? " selected" : "");
+        var icon = item.type === "app" ? "🚀" : item.type === "background" ? "⚙️" : "🔧";
+        el.innerHTML =
+          '<span class="startup-item-icon">' + icon + "</span>" +
+          '<div class="startup-item-info"><div class="startup-item-name">' + item.name + "</div>" +
+          '<div class="startup-item-type">' + item.type + (item.hidden ? " (hidden)" : "") + "</div></div>" +
+          '<div class="startup-item-toggle' + (item.enabled ? " active" : "") + '" data-id="' + item.id + '"></div>';
+        el.addEventListener("click", function (e) {
+          if (e.target.classList.contains("startup-item-toggle")) {
+            item.enabled = !item.enabled;
+            renderStartup();
+            return;
+          }
+          selectedId = item.id;
+          renderStartup();
+        });
+        startupList.appendChild(el);
+      });
+    }
+
+    startupAddBtn.addEventListener("click", function () {
+      var name = prompt("App name:");
+      if (!name) return;
+      items.push({ id: nextId++, name: name, type: "app", enabled: true, hidden: false });
+      renderStartup();
+    });
+
+    startupRemoveBtn.addEventListener("click", function () {
+      if (selectedId) {
+        items = items.filter(function (i) { return i.id !== selectedId; });
+        selectedId = null;
+        renderStartup();
+      }
+    });
+
+    renderStartup();
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     22. i18n LANGUAGE INTEGRATION (Issue #49)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    // Translations
+    var translations = {
+      en: { "menu.file": "File", "menu.edit": "Edit", "menu.view": "View", "menu.go": "Go", "menu.window": "Window", "menu.help": "Help" },
+      pt: { "menu.file": "Ficheiro", "menu.edit": "Editar", "menu.view": "Visualização", "menu.go": "Ir", "menu.window": "Janela", "menu.help": "Ajuda" },
+      es: { "menu.file": "Archivo", "menu.edit": "Editar", "menu.view": "Vista", "menu.go": "Ir", "menu.window": "Ventana", "menu.help": "Ayuda" },
+      fr: { "menu.file": "Fichier", "menu.edit": "Édition", "menu.view": "Présentation", "menu.go": "Aller", "menu.window": "Fenêtre", "menu.help": "Aide" },
+      de: { "menu.file": "Ablage", "menu.edit": "Bearbeiten", "menu.view": "Darstellung", "menu.go": "Gehe zu", "menu.window": "Fenster", "menu.help": "Hilfe" },
+    };
+    var localeNames = { en: "English", pt: "Português", es: "Español", fr: "Français", de: "Deutsch" };
+    var currentLocale = "en";
+
+    // Create language selector element
+    var langSelector = document.createElement("div");
+    langSelector.className = "lang-selector";
+    langSelector.id = "lang-selector";
+
+    Object.keys(localeNames).forEach(function (code) {
+      var opt = document.createElement("div");
+      opt.className = "lang-option" + (code === currentLocale ? " active" : "");
+      opt.textContent = localeNames[code];
+      opt.dataset.locale = code;
+      opt.addEventListener("click", function () {
+        currentLocale = code;
+        applyLocale(code);
+        langSelector.classList.remove("visible");
+        document.querySelectorAll(".lang-option").forEach(function (o) { o.classList.remove("active"); });
+        opt.classList.add("active");
+      });
+      langSelector.appendChild(opt);
+    });
+    document.body.appendChild(langSelector);
+
+    function applyLocale(locale) {
+      var strings = translations[locale] || translations.en;
+      var menuItems = document.querySelectorAll(".menu-left .menu-item:not(.apple-logo):not(.bold)");
+      var menuKeys = ["menu.file", "menu.edit", "menu.view", "menu.go", "menu.window", "menu.help"];
+      menuItems.forEach(function (item, i) {
+        if (menuKeys[i] && strings[menuKeys[i]]) {
+          item.textContent = strings[menuKeys[i]];
+        }
+      });
+    }
+
+    // Toggle language selector: Ctrl+Shift+L
+    document.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.shiftKey && e.key === "L") {
+        e.preventDefault();
+        langSelector.classList.toggle("visible");
+      }
+    });
+
+    // Also wire into Launchpad entry
+    window._auroraI18n = { setLocale: applyLocale, getLocale: function () { return currentLocale; } };
+  })();
+
+  /* ── Open new windows from Launchpad / Dock ──────── */
+  (function () {
+    var appWindowMap = {
+      "Keychain Access": ".window-keychain",
+      "Reminders": ".window-reminders",
+      "Calendar": ".window-calendar-full",
+      "Login Items": ".window-startup",
+    };
+
+    // Wire dock icon clicks to open windows
+    document.querySelectorAll(".dock-icon[data-app]").forEach(function (icon) {
+      icon.addEventListener("click", function () {
+        var appName = icon.dataset.app;
+        // Reminders dock icon
+        if (appName === "Reminders") openAppWindow(".window-reminders");
+        if (appName === "Calendar") openAppWindow(".window-calendar-full");
+      });
+    });
+
+    function openAppWindow(selector) {
+      var win = document.querySelector(selector);
+      if (win) {
+        win.style.display = "";
+        win.style.opacity = "1";
+        win.style.transform = "";
+        focusWindow(win);
+      }
+    }
+
+    // Expose for launchpad
+    window._auroraOpenApp = openAppWindow;
+  })();
+
 })();
