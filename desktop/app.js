@@ -434,4 +434,1153 @@
     "}";
   document.head.appendChild(ctxStyle);
 
+  /* ══════════════════════════════════════════════════════
+     8. WIDGETS PANEL / TODAY VIEW (Issue #14)
+     ══════════════════════════════════════════════════════ */
+  var widgetsPanel = document.getElementById("widgets-panel");
+
+  // Toggle widgets on clock click
+  clockEl.addEventListener("click", function (e) {
+    e.stopPropagation();
+    widgetsPanel.classList.toggle("visible");
+    ccPanel.classList.remove("visible");
+    spotlightOverlay.classList.remove("visible");
+  });
+
+  // Close widgets on outside click
+  document.addEventListener("click", function (e) {
+    if (widgetsPanel.classList.contains("visible") &&
+        !widgetsPanel.contains(e.target) && e.target !== clockEl) {
+      widgetsPanel.classList.remove("visible");
+    }
+  });
+
+  // Widget clock hands
+  function updateWidgetClock() {
+    var now = new Date();
+    var h = now.getHours() % 12;
+    var m = now.getMinutes();
+    var s = now.getSeconds();
+    var hourDeg = (h * 30) + (m * 0.5);
+    var minDeg = m * 6;
+    var secDeg = s * 6;
+    var hourEl = document.getElementById("clock-hour");
+    var minEl = document.getElementById("clock-minute");
+    var secEl = document.getElementById("clock-second");
+    if (hourEl) hourEl.style.transform = "rotate(" + hourDeg + "deg)";
+    if (minEl) minEl.style.transform = "rotate(" + minDeg + "deg)";
+    if (secEl) secEl.style.transform = "rotate(" + secDeg + "deg)";
+
+    var digitalEl = document.getElementById("widget-clock-digital");
+    if (digitalEl) {
+      var hrs = now.getHours();
+      var ampm = hrs >= 12 ? "PM" : "AM";
+      hrs = hrs % 12 || 12;
+      digitalEl.textContent = hrs + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + " " + ampm;
+    }
+  }
+  updateWidgetClock();
+  setInterval(updateWidgetClock, 1000);
+
+  // Calendar widget
+  (function () {
+    var now = new Date();
+    var headerEl = document.getElementById("widget-cal-header");
+    var gridEl = document.getElementById("widget-cal-grid");
+    if (!headerEl || !gridEl) return;
+
+    var monthNames = ["January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"];
+    headerEl.textContent = monthNames[now.getMonth()] + " " + now.getFullYear();
+
+    var dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    dayNames.forEach(function (d) {
+      var span = document.createElement("span");
+      span.className = "cal-day-name";
+      span.textContent = d;
+      gridEl.appendChild(span);
+    });
+
+    var firstDay = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+    var daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    var prevDays = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+
+    for (var i = firstDay - 1; i >= 0; i--) {
+      var span = document.createElement("span");
+      span.className = "cal-day other-month";
+      span.textContent = prevDays - i;
+      gridEl.appendChild(span);
+    }
+    for (var d = 1; d <= daysInMonth; d++) {
+      var span = document.createElement("span");
+      span.className = "cal-day" + (d === now.getDate() ? " today" : "");
+      span.textContent = d;
+      gridEl.appendChild(span);
+    }
+    var remaining = 42 - firstDay - daysInMonth;
+    for (var i = 1; i <= remaining; i++) {
+      var span = document.createElement("span");
+      span.className = "cal-day other-month";
+      span.textContent = i;
+      gridEl.appendChild(span);
+    }
+  })();
+
+  // Weather forecast
+  (function () {
+    var forecastEl = document.getElementById("widget-weather-forecast");
+    if (!forecastEl) return;
+    var days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    var temps = ["16°", "18°", "20°", "17°", "15°"];
+    var icons = ["☁️", "⛅", "☀️", "🌧️", "☁️"];
+    days.forEach(function (day, i) {
+      var item = document.createElement("div");
+      item.className = "widget-forecast-item";
+      item.innerHTML = "<div>" + day + "</div><div>" + icons[i] + "</div><div class='forecast-temp'>" + temps[i] + "</div>";
+      forecastEl.appendChild(item);
+    });
+  })();
+
+  // Animate system monitor values
+  setInterval(function () {
+    var ids = [
+      { bar: "sys-cpu", pct: "sys-cpu-pct", min: 15, max: 85 },
+      { bar: "sys-mem", pct: "sys-mem-pct", min: 45, max: 80 },
+      { bar: "sys-net", pct: "sys-net-pct", min: 5, max: 60 },
+    ];
+    ids.forEach(function (item) {
+      var val = item.min + Math.floor(Math.random() * (item.max - item.min));
+      var barEl = document.getElementById(item.bar);
+      var pctEl = document.getElementById(item.pct);
+      if (barEl) barEl.style.width = val + "%";
+      if (pctEl) pctEl.textContent = val + "%";
+    });
+  }, 3000);
+
+  /* ══════════════════════════════════════════════════════
+     9. HOT CORNERS (Issue #15)
+     ══════════════════════════════════════════════════════ */
+  var hotCornerTimers = {};
+  var hotCornerDelay = 200;
+  var missionControlOverlay = document.getElementById("mission-control-overlay");
+  var launchpadOverlay = document.getElementById("launchpad-overlay");
+  var hotIndicator = document.getElementById("hot-corners-indicator");
+
+  var hotCornerActions = {
+    "mission-control": function () { toggleMissionControl(); },
+    "widgets": function () { widgetsPanel.classList.toggle("visible"); },
+    "desktop": function () { toggleShowDesktop(); },
+    "launchpad": function () { toggleLaunchpad(); },
+  };
+
+  function toggleMissionControl() {
+    missionControlOverlay.classList.toggle("visible");
+    launchpadOverlay.classList.remove("visible");
+    if (missionControlOverlay.classList.contains("visible")) {
+      var mcWins = document.getElementById("mc-windows");
+      mcWins.innerHTML = "";
+      windows.forEach(function (win) {
+        if (win.style.display === "none") return;
+        var thumb = document.createElement("div");
+        thumb.className = "mc-window-thumb";
+        var titleEl = win.querySelector(".window-title");
+        thumb.textContent = titleEl ? titleEl.textContent : "Window";
+        thumb.addEventListener("click", function () {
+          focusWindow(win);
+          missionControlOverlay.classList.remove("visible");
+        });
+        mcWins.appendChild(thumb);
+      });
+    }
+  }
+
+  function toggleShowDesktop() {
+    var allHidden = true;
+    windows.forEach(function (w) {
+      if (w.style.display !== "none") allHidden = false;
+    });
+    if (allHidden) {
+      windows.forEach(function (w) {
+        w.style.display = "";
+        w.style.opacity = "1";
+        w.style.transform = "";
+      });
+    } else {
+      windows.forEach(function (w) {
+        w.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+        w.style.opacity = "0";
+        w.style.transform = "scale(0.95)";
+        setTimeout(function () { w.style.display = "none"; }, 260);
+      });
+    }
+  }
+
+  function toggleLaunchpad() {
+    launchpadOverlay.classList.toggle("visible");
+    missionControlOverlay.classList.remove("visible");
+    if (launchpadOverlay.classList.contains("visible")) {
+      var grid = document.getElementById("launchpad-grid");
+      if (grid.children.length > 0) return;
+      var apps = [
+        { name: "Finder", color: "#007aff", icon: "📁" },
+        { name: "Safari", color: "#56c0f0", icon: "🧭" },
+        { name: "Messages", color: "#34c759", icon: "💬" },
+        { name: "Mail", color: "#007aff", icon: "✉️" },
+        { name: "Maps", color: "#32a852", icon: "🗺️" },
+        { name: "Photos", color: "#f5f5f7", icon: "🖼️" },
+        { name: "FaceTime", color: "#28a745", icon: "📹" },
+        { name: "Calendar", color: "#ff3b30", icon: "📅" },
+        { name: "Notes", color: "#ffd60a", icon: "📝" },
+        { name: "Music", color: "#fc3c44", icon: "🎵" },
+        { name: "TV", color: "#1d1d1f", icon: "📺" },
+        { name: "App Store", color: "#0071e3", icon: "🏪" },
+        { name: "Settings", color: "#636366", icon: "⚙️" },
+        { name: "Color Picker", color: "#af52de", icon: "🎨" },
+        { name: "Calculator", color: "#333", icon: "🔢" },
+        { name: "Terminal", color: "#1d1d1f", icon: "💻" },
+        { name: "TextEdit", color: "#007aff", icon: "📄" },
+        { name: "Preview", color: "#5ac8fa", icon: "👁️" },
+        { name: "Activity Monitor", color: "#34c759", icon: "📊" },
+        { name: "Disk Utility", color: "#48c6ef", icon: "💿" },
+        { name: "Console", color: "#636366", icon: "🖥️" },
+      ];
+      apps.forEach(function (app) {
+        var el = document.createElement("div");
+        el.className = "launchpad-icon";
+        el.innerHTML = '<div class="launchpad-icon-img" style="background:' + app.color + ';">' + app.icon + '</div><div class="launchpad-icon-label">' + app.name + '</div>';
+        el.addEventListener("click", function () {
+          launchpadOverlay.classList.remove("visible");
+          if (app.name === "Color Picker") {
+            var cpWin = document.querySelector(".window-colorpicker");
+            if (cpWin) { cpWin.style.display = ""; cpWin.style.opacity = "1"; cpWin.style.transform = ""; focusWindow(cpWin); }
+          }
+        });
+        grid.appendChild(el);
+      });
+    }
+  }
+
+  // Hot corner mouse detection
+  document.querySelectorAll(".hot-corner").forEach(function (corner) {
+    corner.addEventListener("mouseenter", function () {
+      var action = corner.dataset.action;
+      hotCornerTimers[action] = setTimeout(function () {
+        if (hotCornerActions[action]) hotCornerActions[action]();
+      }, hotCornerDelay);
+    });
+    corner.addEventListener("mouseleave", function () {
+      var action = corner.dataset.action;
+      clearTimeout(hotCornerTimers[action]);
+    });
+  });
+
+  // Close overlays on Escape
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      missionControlOverlay.classList.remove("visible");
+      launchpadOverlay.classList.remove("visible");
+      widgetsPanel.classList.remove("visible");
+    }
+  });
+
+  // Close overlays on click
+  missionControlOverlay.addEventListener("click", function (e) {
+    if (e.target === missionControlOverlay) missionControlOverlay.classList.remove("visible");
+  });
+  launchpadOverlay.addEventListener("click", function (e) {
+    if (e.target === launchpadOverlay) launchpadOverlay.classList.remove("visible");
+  });
+
+  /* ══════════════════════════════════════════════════════
+     10. COLOR PICKER (Issue #45)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var canvas = document.getElementById("cp-canvas");
+    var ctx = canvas ? canvas.getContext("2d") : null;
+    var hueSlider = document.getElementById("cp-hue");
+    var preview = document.getElementById("cp-preview");
+    var hexInput = document.getElementById("cp-hex");
+    var rInput = document.getElementById("cp-r");
+    var gInput = document.getElementById("cp-g");
+    var bInput = document.getElementById("cp-b");
+    var saveBtn = document.getElementById("cp-save-btn");
+    var palette = document.getElementById("cp-palette");
+
+    if (!canvas || !ctx) return;
+
+    var currentHue = 11;
+    var currentR = 255, currentG = 87, currentB = 51;
+
+    function drawColorField(hue) {
+      var w = canvas.width, h = canvas.height;
+      // Draw saturation-brightness plane
+      for (var x = 0; x < w; x++) {
+        var satGrad = ctx.createLinearGradient(0, 0, 0, h);
+        var hsl = "hsl(" + hue + ", " + Math.round((x / w) * 100) + "%, 50%)";
+        satGrad.addColorStop(0, "#fff");
+        satGrad.addColorStop(0.5, hsl);
+        satGrad.addColorStop(1, "#000");
+        ctx.fillStyle = satGrad;
+        ctx.fillRect(x, 0, 1, h);
+      }
+    }
+
+    function updateFromRGB(r, g, b) {
+      currentR = r; currentG = g; currentB = b;
+      var hex = "#" + [r, g, b].map(function (v) { return v.toString(16).padStart(2, "0"); }).join("").toUpperCase();
+      if (preview) preview.style.background = hex;
+      if (hexInput) hexInput.value = hex;
+      if (rInput) rInput.value = r;
+      if (gInput) gInput.value = g;
+      if (bInput) bInput.value = b;
+    }
+
+    function hexToRGB(hex) {
+      hex = hex.replace("#", "");
+      if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+      return {
+        r: parseInt(hex.substring(0, 2), 16),
+        g: parseInt(hex.substring(2, 4), 16),
+        b: parseInt(hex.substring(4, 6), 16),
+      };
+    }
+
+    drawColorField(currentHue);
+
+    if (hueSlider) {
+      hueSlider.addEventListener("input", function () {
+        currentHue = parseInt(this.value);
+        drawColorField(currentHue);
+      });
+    }
+
+    canvas.addEventListener("click", function (e) {
+      var rect = canvas.getBoundingClientRect();
+      var x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+      var y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+      var pixel = ctx.getImageData(x, y, 1, 1).data;
+      updateFromRGB(pixel[0], pixel[1], pixel[2]);
+    });
+
+    // Dragging on canvas
+    var cpDragging = false;
+    canvas.addEventListener("mousedown", function (e) {
+      cpDragging = true;
+      var rect = canvas.getBoundingClientRect();
+      var x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+      var y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+      var pixel = ctx.getImageData(x, y, 1, 1).data;
+      updateFromRGB(pixel[0], pixel[1], pixel[2]);
+    });
+    document.addEventListener("mousemove", function (e) {
+      if (!cpDragging) return;
+      var rect = canvas.getBoundingClientRect();
+      var x = Math.max(0, Math.min(canvas.width - 1, Math.round((e.clientX - rect.left) * (canvas.width / rect.width))));
+      var y = Math.max(0, Math.min(canvas.height - 1, Math.round((e.clientY - rect.top) * (canvas.height / rect.height))));
+      var pixel = ctx.getImageData(x, y, 1, 1).data;
+      updateFromRGB(pixel[0], pixel[1], pixel[2]);
+    });
+    document.addEventListener("mouseup", function () { cpDragging = false; });
+
+    // Update from hex input
+    if (hexInput) {
+      hexInput.addEventListener("change", function () {
+        var val = this.value.trim();
+        if (/^#?[0-9a-fA-F]{3,6}$/.test(val)) {
+          var rgb = hexToRGB(val);
+          updateFromRGB(rgb.r, rgb.g, rgb.b);
+        }
+      });
+    }
+
+    // Update from RGB inputs
+    [rInput, gInput, bInput].forEach(function (input) {
+      if (!input) return;
+      input.addEventListener("change", function () {
+        var r = parseInt(rInput.value) || 0;
+        var g = parseInt(gInput.value) || 0;
+        var b = parseInt(bInput.value) || 0;
+        updateFromRGB(
+          Math.max(0, Math.min(255, r)),
+          Math.max(0, Math.min(255, g)),
+          Math.max(0, Math.min(255, b))
+        );
+      });
+    });
+
+    // Save to palette
+    if (saveBtn) {
+      saveBtn.addEventListener("click", function () {
+        var hex = hexInput.value;
+        var swatch = document.createElement("div");
+        swatch.className = "cp-swatch";
+        swatch.style.background = hex;
+        swatch.dataset.color = hex;
+        swatch.addEventListener("click", function () {
+          var rgb = hexToRGB(swatch.dataset.color);
+          updateFromRGB(rgb.r, rgb.g, rgb.b);
+        });
+        palette.insertBefore(swatch, saveBtn);
+      });
+    }
+
+    // Palette swatches click
+    document.querySelectorAll(".cp-swatch[data-color]").forEach(function (sw) {
+      sw.addEventListener("click", function () {
+        var rgb = hexToRGB(sw.dataset.color);
+        updateFromRGB(rgb.r, rgb.g, rgb.b);
+      });
+    });
+  })();
+
+  // Open Color Picker from dock
+  var colorPickerDockIcon = document.querySelector('[data-app="System Preferences"]');
+  // We'll use a dedicated dock icon approach: open via Launchpad
+
+  /* ══════════════════════════════════════════════════════
+     11. PICTURE-IN-PICTURE (Issue #63)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var pipWin = document.getElementById("pip-window");
+    var pipClose = document.getElementById("pip-close");
+    var pipBack = document.getElementById("pip-back");
+    var pipTitlebar = document.getElementById("pip-titlebar");
+    var pipPlayBtn = document.getElementById("pip-play-btn");
+    var pipResize = document.getElementById("pip-resize");
+
+    if (!pipWin) return;
+
+    // Drag PiP
+    var pipDragging = false;
+    var pipOffX = 0, pipOffY = 0;
+    pipTitlebar.addEventListener("mousedown", function (e) {
+      if (e.target.closest(".pip-btn")) return;
+      pipDragging = true;
+      pipOffX = e.clientX - pipWin.offsetLeft;
+      pipOffY = e.clientY - pipWin.offsetTop;
+      e.preventDefault();
+    });
+    document.addEventListener("mousemove", function (e) {
+      if (!pipDragging) return;
+      pipWin.style.left = Math.max(0, e.clientX - pipOffX) + "px";
+      pipWin.style.top = Math.max(0, e.clientY - pipOffY) + "px";
+      pipWin.style.right = "auto";
+      pipWin.style.bottom = "auto";
+    });
+    document.addEventListener("mouseup", function () { pipDragging = false; });
+
+    // Close PiP
+    pipClose.addEventListener("click", function () {
+      pipWin.style.display = "none";
+    });
+
+    // Back to app
+    pipBack.addEventListener("click", function () {
+      pipWin.style.display = "none";
+    });
+
+    // Play/Pause toggle
+    var isPlaying = true;
+    pipPlayBtn.addEventListener("click", function () {
+      isPlaying = !isPlaying;
+      pipPlayBtn.textContent = isPlaying ? "▶" : "⏸";
+      pipPlayBtn.classList.toggle("playing", !isPlaying);
+      var waves = pipWin.querySelectorAll(".pip-wave");
+      waves.forEach(function (w) {
+        w.style.animationPlayState = isPlaying ? "running" : "paused";
+      });
+    });
+
+    // Resize PiP (constrain 16:9)
+    var pipResizing = false;
+    var pipStartW = 0, pipStartH = 0, pipStartX = 0, pipStartY = 0;
+    pipResize.addEventListener("mousedown", function (e) {
+      pipResizing = true;
+      pipStartW = pipWin.offsetWidth;
+      pipStartH = pipWin.offsetHeight;
+      pipStartX = e.clientX;
+      pipStartY = e.clientY;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    document.addEventListener("mousemove", function (e) {
+      if (!pipResizing) return;
+      var dw = e.clientX - pipStartX;
+      var newW = Math.max(200, Math.min(640, pipStartW + dw));
+      var newH = Math.round(newW * 9 / 16);
+      pipWin.style.width = newW + "px";
+      pipWin.style.height = newH + "px";
+    });
+    document.addEventListener("mouseup", function () { pipResizing = false; });
+
+    // Double-click to toggle size
+    pipWin.addEventListener("dblclick", function (e) {
+      if (e.target.closest(".pip-btn") || e.target.closest(".pip-play-btn")) return;
+      var currW = pipWin.offsetWidth;
+      if (currW < 400) {
+        pipWin.style.width = "480px";
+        pipWin.style.height = "270px";
+      } else {
+        pipWin.style.width = "320px";
+        pipWin.style.height = "180px";
+      }
+    });
+
+    // Show PiP when TV dock icon is clicked
+    var tvIcon = document.querySelector('[data-app="TV"]');
+    if (tvIcon) {
+      tvIcon.addEventListener("click", function () {
+        pipWin.style.display = "";
+      });
+    }
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     12. WINDOW TAB SUPPORT (Issue #75)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    // Add tabs to applicable windows: Safari, Maps, Messages
+    var tabbableWindows = [
+      { selector: ".window-safari", name: "Safari", tabs: ["apple.com", "google.com", "github.com"] },
+      { selector: ".window-maps", name: "Maps", tabs: ["San Francisco", "New York"] },
+    ];
+
+    tabbableWindows.forEach(function (config) {
+      var win = document.querySelector(config.selector);
+      if (!win) return;
+
+      var titlebar = win.querySelector(".window-titlebar");
+      var content = win.querySelector(".window-content");
+      if (!titlebar || !content) return;
+
+      // Create tab bar
+      var tabBar = document.createElement("div");
+      tabBar.className = "window-tabs";
+
+      // Store original content
+      var originalHTML = content.innerHTML;
+
+      // Create tabs
+      config.tabs.forEach(function (tabName, idx) {
+        var tab = document.createElement("div");
+        tab.className = "window-tab" + (idx === 0 ? " active" : "");
+        tab.innerHTML = '<span class="window-tab-title">' + tabName + '</span><span class="window-tab-close">✕</span>';
+        tab.dataset.tabIndex = idx;
+
+        tab.addEventListener("click", function (e) {
+          if (e.target.classList.contains("window-tab-close")) {
+            // Close tab
+            tab.remove();
+            var remaining = tabBar.querySelectorAll(".window-tab");
+            if (remaining.length === 0) {
+              // Remove tab bar if no tabs left
+              tabBar.remove();
+              return;
+            }
+            if (tab.classList.contains("active") && remaining.length > 0) {
+              remaining[0].classList.add("active");
+            }
+            return;
+          }
+          // Switch tab
+          tabBar.querySelectorAll(".window-tab").forEach(function (t) { t.classList.remove("active"); });
+          tab.classList.add("active");
+          // Update window title
+          var titleEl = win.querySelector(".window-title");
+          if (titleEl) titleEl.textContent = tabName;
+        });
+
+        tabBar.appendChild(tab);
+      });
+
+      // Add new tab button
+      var addTab = document.createElement("div");
+      addTab.className = "window-tab-add";
+      addTab.textContent = "+";
+      addTab.title = "New Tab (Ctrl+T)";
+      addTab.addEventListener("click", function () {
+        var tabCount = tabBar.querySelectorAll(".window-tab").length;
+        var newName = config.name + " Tab " + (tabCount + 1);
+        var tab = document.createElement("div");
+        tab.className = "window-tab active";
+        tab.innerHTML = '<span class="window-tab-title">' + newName + '</span><span class="window-tab-close">✕</span>';
+
+        tabBar.querySelectorAll(".window-tab").forEach(function (t) { t.classList.remove("active"); });
+
+        tab.addEventListener("click", function (e) {
+          if (e.target.classList.contains("window-tab-close")) {
+            tab.remove();
+            var remaining = tabBar.querySelectorAll(".window-tab");
+            if (remaining.length > 0 && tab.classList.contains("active")) {
+              remaining[0].classList.add("active");
+            }
+            return;
+          }
+          tabBar.querySelectorAll(".window-tab").forEach(function (t) { t.classList.remove("active"); });
+          tab.classList.add("active");
+          var titleEl = win.querySelector(".window-title");
+          if (titleEl) titleEl.textContent = newName;
+        });
+
+        tabBar.insertBefore(tab, addTab);
+      });
+      tabBar.appendChild(addTab);
+
+      // Insert tab bar after titlebar
+      titlebar.insertAdjacentElement("afterend", tabBar);
+    });
+
+    // Keyboard shortcuts for tabs
+    document.addEventListener("keydown", function (e) {
+      // Ctrl+T: New tab in focused window
+      if (e.ctrlKey && e.key === "t") {
+        e.preventDefault();
+        var focused = document.querySelector(".window.focused .window-tab-add");
+        if (focused) focused.click();
+      }
+      // Ctrl+W: Close current tab
+      if (e.ctrlKey && e.key === "w") {
+        e.preventDefault();
+        var activeTab = document.querySelector(".window.focused .window-tab.active .window-tab-close");
+        if (activeTab) activeTab.click();
+      }
+      // Ctrl+Tab: Next tab
+      if (e.ctrlKey && e.key === "Tab") {
+        e.preventDefault();
+        var focusedWin = document.querySelector(".window.focused");
+        if (!focusedWin) return;
+        var tabs = focusedWin.querySelectorAll(".window-tab");
+        var activeIdx = -1;
+        tabs.forEach(function (t, i) { if (t.classList.contains("active")) activeIdx = i; });
+        if (activeIdx >= 0 && tabs.length > 1) {
+          var nextIdx = e.shiftKey ?
+            (activeIdx - 1 + tabs.length) % tabs.length :
+            (activeIdx + 1) % tabs.length;
+          tabs[activeIdx].classList.remove("active");
+          tabs[nextIdx].classList.add("active");
+          var titleEl = focusedWin.querySelector(".window-title");
+          var tabTitle = tabs[nextIdx].querySelector(".window-tab-title");
+          if (titleEl && tabTitle) titleEl.textContent = tabTitle.textContent;
+        }
+      }
+    });
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     13. CLIPBOARD HISTORY (Issue #13)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var clipPanel = document.getElementById("clipboard-panel");
+    var clipList = document.getElementById("clipboard-list");
+    var clipSearchInput = document.getElementById("clipboard-search-input");
+    var clipClearBtn = document.getElementById("clipboard-clear-btn");
+    if (!clipPanel) return;
+
+    // Inline clipboard history logic (mirrors module)
+    var clipHistory = [];
+    var maxClip = 50;
+
+    function clipCopy(content, type, source) {
+      if (!content) return;
+      var idx = clipHistory.findIndex(function (e) { return e.content === content; });
+      if (idx !== -1) clipHistory.splice(idx, 1);
+      clipHistory.unshift({
+        content: content, type: type || "text", source: source || "",
+        timestamp: Date.now(), pinned: false,
+      });
+      while (clipHistory.length > maxClip) {
+        for (var i = clipHistory.length - 1; i >= 0; i--) {
+          if (!clipHistory[i].pinned) { clipHistory.splice(i, 1); break; }
+        }
+      }
+    }
+
+    // Intercept Ctrl+C
+    document.addEventListener("copy", function () {
+      var sel = window.getSelection().toString();
+      if (sel) clipCopy(sel, "text", "Selection");
+    });
+
+    function renderClipboard(filter) {
+      clipList.innerHTML = "";
+      var items = clipHistory;
+      if (filter) {
+        var q = filter.toLowerCase();
+        items = items.filter(function (e) { return e.content.toLowerCase().indexOf(q) !== -1; });
+      }
+      if (items.length === 0) {
+        clipList.innerHTML = '<div class="clipboard-empty">' + (filter ? "No matches" : "No clipboard history yet") + "</div>";
+        return;
+      }
+      items.forEach(function (entry, i) {
+        var el = document.createElement("div");
+        el.className = "clipboard-item";
+        var age = Math.round((Date.now() - entry.timestamp) / 60000);
+        var ageStr = age < 1 ? "now" : age + "m ago";
+        el.innerHTML =
+          '<span class="clipboard-item-pin ' + (entry.pinned ? "pinned" : "") + '" data-idx="' + i + '">📌</span>' +
+          '<div class="clipboard-item-content">' + escapeHtml(entry.content) + "</div>" +
+          '<span class="clipboard-item-meta">' + ageStr + "</span>";
+        el.addEventListener("click", function (e) {
+          if (e.target.classList.contains("clipboard-item-pin")) {
+            entry.pinned = !entry.pinned;
+            renderClipboard(filter);
+            return;
+          }
+          // Copy to clipboard
+          navigator.clipboard.writeText(entry.content).catch(function () {});
+          clipPanel.classList.remove("visible");
+        });
+        clipList.appendChild(el);
+      });
+    }
+
+    function escapeHtml(s) {
+      var d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // Toggle clipboard panel: Ctrl+Shift+V
+    document.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.shiftKey && e.key === "V") {
+        e.preventDefault();
+        clipPanel.classList.toggle("visible");
+        if (clipPanel.classList.contains("visible")) {
+          renderClipboard();
+          setTimeout(function () { clipSearchInput.focus(); }, 50);
+        }
+      }
+    });
+
+    clipSearchInput.addEventListener("input", function () {
+      renderClipboard(this.value);
+    });
+
+    clipClearBtn.addEventListener("click", function () {
+      clipHistory = clipHistory.filter(function (e) { return e.pinned; });
+      renderClipboard();
+    });
+
+    // Close on outside click
+    document.addEventListener("click", function (e) {
+      if (clipPanel.classList.contains("visible") && !clipPanel.contains(e.target)) {
+        clipPanel.classList.remove("visible");
+      }
+    });
+
+    // Seed some demo entries
+    clipCopy("Hello, world!", "text", "TextEdit");
+    clipCopy("https://auroraos.dev", "link", "Safari");
+    clipCopy("npm install auroraos-sdk", "text", "Terminal");
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     14. NOTIFICATION CENTER (Issue #52)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var notifPanel = document.getElementById("notif-panel");
+    var notifList = document.getElementById("notif-list");
+    var notifBadge = document.getElementById("notif-badge");
+    var notifClearAll = document.getElementById("notif-clear-all");
+    var notifDndBtn = document.getElementById("notif-dnd-btn");
+    if (!notifPanel) return;
+
+    var notifications = [];
+    var nextId = 1;
+    var dnd = false;
+
+    function addNotif(app, icon, title, body, actions) {
+      notifications.unshift({
+        id: nextId++, app: app, icon: icon, title: title,
+        body: body, actions: actions || [], read: false, timestamp: Date.now(),
+      });
+      updateBadge();
+      renderNotifs();
+    }
+
+    function updateBadge() {
+      var unread = notifications.filter(function (n) { return !n.read; }).length;
+      if (unread > 0) {
+        notifBadge.style.display = "";
+        notifBadge.textContent = unread;
+      } else {
+        notifBadge.style.display = "none";
+      }
+    }
+
+    function timeAgo(ts) {
+      var m = Math.round((Date.now() - ts) / 60000);
+      if (m < 1) return "now";
+      if (m < 60) return m + "m";
+      return Math.round(m / 60) + "h";
+    }
+
+    function renderNotifs() {
+      notifList.innerHTML = "";
+      if (notifications.length === 0) {
+        notifList.innerHTML = '<div class="notif-empty">No new notifications</div>';
+        return;
+      }
+      // Group by app
+      var groups = {};
+      notifications.forEach(function (n) {
+        if (!groups[n.app]) groups[n.app] = [];
+        groups[n.app].push(n);
+      });
+      Object.keys(groups).forEach(function (app) {
+        var header = document.createElement("div");
+        header.className = "notif-group-header";
+        header.innerHTML = "<span>" + app + " (" + groups[app].length + ")</span>";
+        var clearGrp = document.createElement("button");
+        clearGrp.className = "notif-group-clear";
+        clearGrp.textContent = "Clear";
+        clearGrp.addEventListener("click", function () {
+          notifications = notifications.filter(function (n) { return n.app !== app; });
+          updateBadge();
+          renderNotifs();
+        });
+        header.appendChild(clearGrp);
+        notifList.appendChild(header);
+
+        groups[app].forEach(function (n) {
+          var card = document.createElement("div");
+          card.className = "notif-card";
+          var actionsHtml = "";
+          if (n.actions.length) {
+            actionsHtml = '<div class="notif-card-actions">' +
+              n.actions.map(function (a) { return '<button class="notif-action-btn" data-action="' + a + '">' + a + '</button>'; }).join("") +
+              "</div>";
+          }
+          card.innerHTML =
+            '<div class="notif-card-top">' +
+              '<span class="notif-card-icon">' + n.icon + '</span>' +
+              '<div class="notif-card-body"><div class="notif-card-title">' + n.title + '</div><div class="notif-card-text">' + n.body + '</div></div>' +
+              '<span class="notif-card-time">' + timeAgo(n.timestamp) + '</span>' +
+            '</div>' + actionsHtml;
+          card.addEventListener("click", function (e) {
+            if (e.target.classList.contains("notif-action-btn")) {
+              n.read = true;
+              updateBadge();
+              renderNotifs();
+              return;
+            }
+            n.read = true;
+            updateBadge();
+          });
+          notifList.appendChild(card);
+        });
+      });
+    }
+
+    // Open notification panel from bell area (reuse cc-toggle area)
+    // We'll use a dedicated button — add click to the clock to also toggle notifs
+    var notifToggle = document.getElementById("cc-toggle");
+    notifToggle.addEventListener("dblclick", function (e) {
+      e.stopPropagation();
+      notifPanel.classList.toggle("visible");
+      widgetsPanel.classList.remove("visible");
+    });
+
+    notifClearAll.addEventListener("click", function () {
+      notifications = [];
+      updateBadge();
+      renderNotifs();
+    });
+
+    notifDndBtn.addEventListener("click", function () {
+      dnd = !dnd;
+      notifDndBtn.classList.toggle("active", dnd);
+    });
+
+    // Close on outside click
+    document.addEventListener("click", function (e) {
+      if (notifPanel.classList.contains("visible") &&
+          !notifPanel.contains(e.target) && e.target !== notifToggle) {
+        notifPanel.classList.remove("visible");
+      }
+    });
+
+    // Seed demo notifications
+    setTimeout(function () {
+      addNotif("Messages", "💬", "John Appleseed", "Hey! The new build looks great", ["Reply", "Mark as Read"]);
+      addNotif("Mail", "✉️", "Weekly Report", "Your weekly summary is ready to view", ["Open", "Archive"]);
+      addNotif("Calendar", "📅", "Team Standup", "Starting in 15 minutes", ["Join", "Snooze"]);
+      addNotif("Messages", "💬", "Sarah Connor", "Can you review the PR?", ["Reply"]);
+      addNotif("App Store", "🏪", "Update Available", "AuroraOS 2.1 is ready to install", ["Update"]);
+    }, 500);
+
+    renderNotifs();
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     15. SCREENSHOT TOOL (Issue #12)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var ssOverlay = document.getElementById("screenshot-overlay");
+    var ssToolbar = document.getElementById("screenshot-toolbar");
+    var ssCaptureBtn = document.getElementById("ss-capture-btn");
+    var ssCancelBtn = document.getElementById("ss-cancel-btn");
+    var ssSelection = document.getElementById("screenshot-selection");
+    var ssThumb = document.getElementById("screenshot-thumb");
+    if (!ssOverlay) return;
+
+    var ssMode = "fullscreen";
+    var ssSelecting = false;
+    var ssStart = { x: 0, y: 0 };
+
+    // Mode buttons
+    document.querySelectorAll("[data-ss-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        document.querySelectorAll("[data-ss-mode]").forEach(function (b) { b.classList.remove("ss-mode-active"); });
+        btn.classList.add("ss-mode-active");
+        ssMode = btn.dataset.ssMode;
+      });
+    });
+
+    // Open screenshot tool: Ctrl+Shift+5 (macOS-like combo)
+    document.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.shiftKey && e.key === "5") {
+        e.preventDefault();
+        ssOverlay.classList.toggle("visible");
+      }
+      // Quick fullscreen: Ctrl+Shift+3
+      if (e.ctrlKey && e.shiftKey && e.key === "3") {
+        e.preventDefault();
+        doCapture("fullscreen");
+      }
+      // Quick selection: Ctrl+Shift+4
+      if (e.ctrlKey && e.shiftKey && e.key === "4") {
+        e.preventDefault();
+        ssMode = "selection";
+        ssOverlay.classList.add("visible");
+        document.querySelectorAll("[data-ss-mode]").forEach(function (b) { b.classList.remove("ss-mode-active"); });
+        var selBtn = document.querySelector('[data-ss-mode="selection"]');
+        if (selBtn) selBtn.classList.add("ss-mode-active");
+      }
+    });
+
+    // Selection drag
+    ssOverlay.addEventListener("mousedown", function (e) {
+      if (ssMode !== "selection") return;
+      if (ssToolbar.contains(e.target)) return;
+      ssSelecting = true;
+      ssStart.x = e.clientX;
+      ssStart.y = e.clientY;
+      ssSelection.style.display = "block";
+      ssSelection.style.left = e.clientX + "px";
+      ssSelection.style.top = e.clientY + "px";
+      ssSelection.style.width = "0";
+      ssSelection.style.height = "0";
+    });
+    ssOverlay.addEventListener("mousemove", function (e) {
+      if (!ssSelecting) return;
+      var x = Math.min(e.clientX, ssStart.x);
+      var y = Math.min(e.clientY, ssStart.y);
+      var w = Math.abs(e.clientX - ssStart.x);
+      var h = Math.abs(e.clientY - ssStart.y);
+      ssSelection.style.left = x + "px";
+      ssSelection.style.top = y + "px";
+      ssSelection.style.width = w + "px";
+      ssSelection.style.height = h + "px";
+      // Show dimensions
+      var dims = ssSelection.querySelector(".ss-dims");
+      if (!dims) {
+        dims = document.createElement("div");
+        dims.className = "ss-dims";
+        ssSelection.appendChild(dims);
+      }
+      dims.textContent = w + " × " + h;
+    });
+    ssOverlay.addEventListener("mouseup", function () {
+      if (ssSelecting) {
+        ssSelecting = false;
+        doCapture("selection");
+      }
+    });
+
+    // Capture button
+    ssCaptureBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      doCapture(ssMode);
+    });
+
+    ssCancelBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      ssOverlay.classList.remove("visible");
+      ssSelection.style.display = "none";
+    });
+
+    function doCapture(mode) {
+      ssOverlay.classList.remove("visible");
+      ssSelection.style.display = "none";
+
+      // Flash
+      var flash = document.createElement("div");
+      flash.className = "screenshot-flash";
+      document.body.appendChild(flash);
+      setTimeout(function () { flash.remove(); }, 500);
+
+      // Show thumbnail
+      ssThumb.classList.add("visible");
+      setTimeout(function () { ssThumb.classList.remove("visible"); }, 4000);
+    }
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     16. GLOBAL UNDO/REDO (Issue #65)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    // Per-window undo stacks
+    var undoStacks = {};
+
+    function getStack(winId) {
+      if (!undoStacks[winId]) {
+        undoStacks[winId] = { undo: [], redo: [] };
+      }
+      return undoStacks[winId];
+    }
+
+    function pushUndo(winId, action) {
+      var s = getStack(winId);
+      s.undo.push(action);
+      s.redo = [];
+      if (s.undo.length > 100) s.undo.shift();
+    }
+
+    // Ctrl+Z / Ctrl+Y
+    document.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        var focused = document.querySelector(".window.focused");
+        if (!focused) return;
+        var winId = focused.dataset.window || "default";
+        var s = getStack(winId);
+        if (s.undo.length > 0) {
+          var action = s.undo.pop();
+          s.redo.push(action);
+          if (action.undo) action.undo();
+        }
+      }
+      if (e.ctrlKey && (e.key === "y" || (e.shiftKey && e.key === "Z"))) {
+        e.preventDefault();
+        var focused = document.querySelector(".window.focused");
+        if (!focused) return;
+        var winId = focused.dataset.window || "default";
+        var s = getStack(winId);
+        if (s.redo.length > 0) {
+          var action = s.redo.pop();
+          s.undo.push(action);
+          if (action.redo) action.redo();
+        }
+      }
+    });
+
+    // Update Edit menu to show Undo/Redo state
+    var editMenu = menuData["Edit"];
+    if (editMenu) {
+      menuData["Edit"] = ["Undo  ⌘Z", "Redo  ⌘⇧Z", "---", "Cut", "Copy", "Paste", "Select All"];
+    }
+
+    // Make undo available globally
+    window._auroraUndo = { push: pushUndo, getStack: getStack };
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     17. SHARE SHEET (Issue #56)
+     ══════════════════════════════════════════════════════ */
+  (function () {
+    var shareOverlay = document.getElementById("share-overlay");
+    var shareSheet = document.getElementById("share-sheet");
+    var shareCloseBtn = document.getElementById("share-close-btn");
+    var shareTargets = document.getElementById("share-targets");
+    var sharePreview = document.getElementById("share-preview");
+    if (!shareOverlay) return;
+
+    var targets = [
+      { name: "AirDrop", icon: "📡", bg: "#007aff" },
+      { name: "Messages", icon: "💬", bg: "#34c759" },
+      { name: "Mail", icon: "✉️", bg: "#007aff" },
+      { name: "Notes", icon: "📝", bg: "#ffd60a" },
+      { name: "Reminders", icon: "☑️", bg: "#ff9500" },
+      { name: "Photos", icon: "🖼️", bg: "#ff2d55" },
+      { name: "Twitter", icon: "🐦", bg: "#1da1f2" },
+      { name: "Facebook", icon: "📘", bg: "#1877f2" },
+    ];
+
+    // Render targets
+    targets.forEach(function (t) {
+      var el = document.createElement("div");
+      el.className = "share-target";
+      el.innerHTML =
+        '<div class="share-target-icon" style="background:' + t.bg + ';">' + t.icon + '</div>' +
+        '<span class="share-target-label">' + t.name + '</span>';
+      el.addEventListener("click", function () {
+        shareOverlay.classList.remove("visible");
+        // Show brief confirmation
+        var indicator = document.getElementById("hot-corners-indicator");
+        if (indicator) {
+          indicator.textContent = "Shared to " + t.name;
+          indicator.classList.add("visible");
+          setTimeout(function () { indicator.classList.remove("visible"); }, 1500);
+        }
+      });
+      shareTargets.appendChild(el);
+    });
+
+    // Open share sheet from right-click context menu
+    // Add "Share…" to context menu items
+    var ctxItems = document.querySelector(".desktop");
+    if (ctxItems) {
+      ctxItems.addEventListener("contextmenu", function () {
+        setTimeout(function () {
+          var menu = document.querySelector(".context-menu");
+          if (menu && !menu.querySelector(".share-ctx-item")) {
+            var sep = document.createElement("div");
+            sep.className = "menu-dropdown-sep";
+            menu.appendChild(sep);
+            var shareItem = document.createElement("div");
+            shareItem.className = "menu-dropdown-item share-ctx-item";
+            shareItem.textContent = "Share\u2026";
+            shareItem.addEventListener("click", function () {
+              menu.remove();
+              openShareSheet("Selected content from desktop");
+            });
+            menu.appendChild(shareItem);
+          }
+        }, 10);
+      });
+    }
+
+    function openShareSheet(content) {
+      sharePreview.textContent = content || "";
+      shareOverlay.classList.add("visible");
+    }
+
+    shareCloseBtn.addEventListener("click", function () {
+      shareOverlay.classList.remove("visible");
+    });
+
+    shareOverlay.addEventListener("click", function (e) {
+      if (e.target === shareOverlay) shareOverlay.classList.remove("visible");
+    });
+
+    // Share action items
+    document.querySelectorAll("[data-share-action]").forEach(function (item) {
+      item.addEventListener("click", function () {
+        shareOverlay.classList.remove("visible");
+        var indicator = document.getElementById("hot-corners-indicator");
+        if (indicator) {
+          indicator.textContent = "Action completed";
+          indicator.classList.add("visible");
+          setTimeout(function () { indicator.classList.remove("visible"); }, 1200);
+        }
+      });
+    });
+
+    // Expose for external use
+    window._auroraShare = { open: openShareSheet };
+  })();
+
 })();
