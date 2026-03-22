@@ -232,6 +232,120 @@
         </div>
       </section>
 
+      <!-- Window: Keychain / Password Manager (Issue #58) -->
+      <section class="window window-keychain" data-window style="top:90px;left:180px;width:520px;height:420px;z-index:1;display:none;">
+        <div class="window-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <span class="window-title">Keychain Access</span>
+        </div>
+        <div class="window-content keychain-content">
+          <div class="kc-sidebar">
+            <div class="kc-cat kc-cat-active" data-kc-cat="password">🔑 Passwords</div>
+            <div class="kc-cat" data-kc-cat="secure-note">📝 Secure Notes</div>
+            <div class="kc-cat" data-kc-cat="certificate">📜 Certificates</div>
+            <div class="kc-cat" data-kc-cat="key">🔐 Keys</div>
+          </div>
+          <div class="kc-main">
+            <div class="kc-toolbar">
+              <input type="text" class="kc-search" id="kc-search" placeholder="Search keychain..." />
+              <button class="kc-add-btn" id="kc-add-btn">+ Add</button>
+            </div>
+            <div class="kc-list" id="kc-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Window: Reminders / To-Do (Issue #29) -->
+      <section class="window window-reminders" data-window style="top:100px;left:60px;width:440px;height:460px;z-index:1;display:none;">
+        <div class="window-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <span class="window-title">Reminders</span>
+        </div>
+        <div class="window-content reminders-content">
+          <div class="rem-sidebar">
+            <div class="rem-smart-list rem-smart-active" data-rem-view="all">📋 All</div>
+            <div class="rem-smart-list" data-rem-view="today">📅 Today</div>
+            <div class="rem-smart-list" data-rem-view="scheduled">🗓️ Scheduled</div>
+            <div class="rem-smart-list" data-rem-view="flagged">🚩 Flagged</div>
+            <div class="rem-smart-list" data-rem-view="completed">✅ Completed</div>
+            <div class="rem-sep"></div>
+            <div class="rem-lists" id="rem-lists"></div>
+            <button class="rem-add-list-btn" id="rem-add-list-btn">+ Add List</button>
+          </div>
+          <div class="rem-main">
+            <div class="rem-toolbar">
+              <button class="rem-add-task-btn" id="rem-add-task-btn">+ New Reminder</button>
+              <select class="rem-sort" id="rem-sort">
+                <option value="default">Default</option>
+                <option value="priority">Priority</option>
+                <option value="dueDate">Due Date</option>
+                <option value="title">Title</option>
+              </select>
+            </div>
+            <div class="rem-task-list" id="rem-task-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Window: Calendar Event Manager (Issue #34) -->
+      <section class="window window-calendar-full" data-window style="top:70px;left:320px;width:560px;height:460px;z-index:1;display:none;">
+        <div class="window-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <span class="window-title">Calendar</span>
+        </div>
+        <div class="window-content calendar-full-content">
+          <div class="cal-nav">
+            <button class="cal-nav-btn" id="cal-prev">‹</button>
+            <span class="cal-month-label" id="cal-month-label"></span>
+            <button class="cal-nav-btn" id="cal-next">›</button>
+            <button class="cal-today-btn" id="cal-go-today">Today</button>
+            <button class="cal-add-event-btn" id="cal-add-event">+ Event</button>
+          </div>
+          <div class="cal-body">
+            <div class="cal-grid-full" id="cal-grid-full"></div>
+            <div class="cal-day-detail" id="cal-day-detail">
+              <div class="cal-day-title" id="cal-day-title">Select a day</div>
+              <div class="cal-day-events" id="cal-day-events"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Window: Startup Items Manager (Issue #57) -->
+      <section class="window window-startup" data-window style="top:120px;left:250px;width:460px;height:380px;z-index:1;display:none;">
+        <div class="window-titlebar" data-titlebar>
+          <div class="traffic-lights">
+            <span class="tl-btn tl-close"></span>
+            <span class="tl-btn tl-minimize"></span>
+            <span class="tl-btn tl-maximize"></span>
+          </div>
+          <span class="window-title">Login Items</span>
+        </div>
+        <div class="window-content startup-content">
+          <div class="startup-header">
+            <h3>Open at Login</h3>
+            <p>These items open automatically when you log in.</p>
+          </div>
+          <div class="startup-list" id="startup-list"></div>
+          <div class="startup-toolbar">
+            <button class="startup-add-btn" id="startup-add-btn">+ Add</button>
+            <button class="startup-remove-btn" id="startup-remove-btn">− Remove</button>
+          </div>
+        </div>
+      </section>
+
     </main>
 
     <!-- Control Center -->
@@ -476,6 +590,484 @@
         </div>
       </div>
     </footer>
+
+    <!-- Widgets Panel (Today View) -->
+    <div class="widgets-panel" id="widgets-panel">
+      <div class="widgets-header">
+        <h2>Widgets</h2>
+        <button class="widgets-edit-btn" id="widgets-edit-btn">Edit Widgets</button>
+      </div>
+      <div class="widgets-scroll">
+        <!-- Clock Widget -->
+        <div class="widget widget-clock">
+          <div class="widget-label">Clock</div>
+          <div class="widget-clock-face" id="widget-clock-face">
+            <div class="clock-hand clock-hour" id="clock-hour"></div>
+            <div class="clock-hand clock-minute" id="clock-minute"></div>
+            <div class="clock-hand clock-second" id="clock-second"></div>
+            <div class="clock-center-dot"></div>
+          </div>
+          <div class="widget-clock-digital" id="widget-clock-digital"></div>
+        </div>
+        <!-- Calendar Widget -->
+        <div class="widget widget-calendar">
+          <div class="widget-label">Calendar</div>
+          <div class="widget-cal-header" id="widget-cal-header"></div>
+          <div class="widget-cal-grid" id="widget-cal-grid"></div>
+        </div>
+        <!-- Weather Widget -->
+        <div class="widget widget-weather">
+          <div class="widget-weather-top">
+            <div>
+              <div class="widget-weather-location">San Francisco</div>
+              <div class="widget-weather-temp">18°</div>
+              <div class="widget-weather-desc">Partly Cloudy</div>
+            </div>
+            <div class="widget-weather-icon">
+              <svg viewBox="0 0 64 64" width="52" height="52">
+                <circle cx="28" cy="28" r="10" fill="#ffcc00"/>
+                <path d="M28 12v-4M28 48v-4M12 28H8M48 28h-4M16.3 16.3l-2.8-2.8M42.5 42.5l-2.8-2.8M39.7 16.3l2.8-2.8M13.5 42.5l2.8-2.8" stroke="#ffcc00" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M38 36a12 12 0 00-20-8.5A8 8 0 0018 44h22a6 6 0 002-11.7A12 12 0 0038 36z" fill="rgba(255,255,255,0.85)"/>
+              </svg>
+            </div>
+          </div>
+          <div class="widget-weather-forecast" id="widget-weather-forecast"></div>
+        </div>
+        <!-- CPU/Memory Widget -->
+        <div class="widget widget-system">
+          <div class="widget-label">System Monitor</div>
+          <div class="widget-sys-row"><span>CPU</span><div class="widget-sys-bar"><div class="widget-sys-fill" id="sys-cpu" style="width:34%;"></div></div><span class="widget-sys-pct" id="sys-cpu-pct">34%</span></div>
+          <div class="widget-sys-row"><span>Memory</span><div class="widget-sys-bar"><div class="widget-sys-fill widget-sys-fill-mem" id="sys-mem" style="width:62%;"></div></div><span class="widget-sys-pct" id="sys-mem-pct">62%</span></div>
+          <div class="widget-sys-row"><span>Disk</span><div class="widget-sys-bar"><div class="widget-sys-fill widget-sys-fill-disk" id="sys-disk" style="width:45%;"></div></div><span class="widget-sys-pct" id="sys-disk-pct">45%</span></div>
+          <div class="widget-sys-row"><span>Network</span><div class="widget-sys-bar"><div class="widget-sys-fill widget-sys-fill-net" id="sys-net" style="width:18%;"></div></div><span class="widget-sys-pct" id="sys-net-pct">18%</span></div>
+        </div>
+        <!-- Notes Widget -->
+        <div class="widget widget-notes">
+          <div class="widget-label">Quick Note</div>
+          <textarea class="widget-notes-area" placeholder="Type a quick note..."></textarea>
+        </div>
+        <!-- Battery Widget -->
+        <div class="widget widget-battery">
+          <div class="widget-label">Battery</div>
+          <div class="widget-battery-row">
+            <div class="widget-battery-icon">
+              <svg viewBox="0 0 40 20" width="40" height="20" fill="none">
+                <rect x="1" y="1" width="32" height="18" rx="3" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
+                <rect x="3" y="3" width="22" height="14" rx="2" fill="#34c759"/>
+                <path d="M35 7v6a3 3 0 000-6z" fill="rgba(255,255,255,0.4)"/>
+              </svg>
+            </div>
+            <div class="widget-battery-info">
+              <div class="widget-battery-pct">72%</div>
+              <div class="widget-battery-status">Remaining: ~4h 30m</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hot Corners Overlay -->
+    <div class="hot-corner hot-corner-tl" id="hot-corner-tl" data-action="mission-control"></div>
+    <div class="hot-corner hot-corner-tr" id="hot-corner-tr" data-action="widgets"></div>
+    <div class="hot-corner hot-corner-bl" id="hot-corner-bl" data-action="desktop"></div>
+    <div class="hot-corner hot-corner-br" id="hot-corner-br" data-action="launchpad"></div>
+    <!-- Hot Corners Settings -->
+    <div class="hot-corners-indicator" id="hot-corners-indicator"></div>
+
+    <!-- Color Picker Window -->
+    <section class="window window-colorpicker" data-window style="top:100px;left:120px;width:340px;height:480px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="traffic-lights">
+          <span class="tl-btn tl-close"></span>
+          <span class="tl-btn tl-minimize"></span>
+          <span class="tl-btn tl-maximize"></span>
+        </div>
+        <span class="window-title">Color Picker</span>
+      </div>
+      <div class="window-content colorpicker-content">
+        <div class="cp-preview-row">
+          <div class="cp-preview" id="cp-preview"></div>
+          <div class="cp-values">
+            <div class="cp-value-row"><label>HEX</label><input type="text" id="cp-hex" value="#FF5733" class="cp-input" /></div>
+            <div class="cp-value-row"><label>R</label><input type="number" id="cp-r" value="255" min="0" max="255" class="cp-input cp-input-sm" /></div>
+            <div class="cp-value-row"><label>G</label><input type="number" id="cp-g" value="87" min="0" max="255" class="cp-input cp-input-sm" /></div>
+            <div class="cp-value-row"><label>B</label><input type="number" id="cp-b" value="51" min="0" max="255" class="cp-input cp-input-sm" /></div>
+          </div>
+        </div>
+        <canvas id="cp-canvas" class="cp-canvas" width="300" height="200"></canvas>
+        <input type="range" id="cp-hue" min="0" max="360" value="11" class="cp-hue-slider" />
+        <div class="cp-palette-label">Saved Colors</div>
+        <div class="cp-palette" id="cp-palette">
+          <div class="cp-swatch" style="background:#ff3b30;" data-color="#ff3b30"></div>
+          <div class="cp-swatch" style="background:#ff9500;" data-color="#ff9500"></div>
+          <div class="cp-swatch" style="background:#ffcc00;" data-color="#ffcc00"></div>
+          <div class="cp-swatch" style="background:#34c759;" data-color="#34c759"></div>
+          <div class="cp-swatch" style="background:#5ac8fa;" data-color="#5ac8fa"></div>
+          <div class="cp-swatch" style="background:#007aff;" data-color="#007aff"></div>
+          <div class="cp-swatch" style="background:#af52de;" data-color="#af52de"></div>
+          <div class="cp-swatch" style="background:#ff2d55;" data-color="#ff2d55"></div>
+          <div class="cp-swatch" style="background:#1d1d1f;" data-color="#1d1d1f"></div>
+          <div class="cp-swatch" style="background:#f5f5f7;" data-color="#f5f5f7"></div>
+          <div class="cp-swatch cp-swatch-add" id="cp-save-btn" title="Save current color">+</div>
+        </div>
+        <button class="cp-eyedropper-btn" id="cp-eyedropper">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 22l1-6 13-13a3 3 0 114 4L7 21l-5 1z"/><path d="M15 6l3 3"/></svg>
+          Eyedropper
+        </button>
+      </div>
+    </section>
+
+    <!-- PiP Window -->
+    <div class="pip-window" id="pip-window" style="display:none;">
+      <div class="pip-titlebar" id="pip-titlebar">
+        <div class="pip-controls">
+          <button class="pip-btn pip-close" id="pip-close" title="Close">✕</button>
+          <button class="pip-btn pip-back" id="pip-back" title="Back to App">↩</button>
+        </div>
+      </div>
+      <div class="pip-content">
+        <div class="pip-video-placeholder">
+          <div class="pip-video-animation">
+            <div class="pip-wave pip-wave-1"></div>
+            <div class="pip-wave pip-wave-2"></div>
+            <div class="pip-wave pip-wave-3"></div>
+          </div>
+          <div class="pip-play-btn" id="pip-play-btn">▶</div>
+        </div>
+      </div>
+      <div class="pip-resize-handle" id="pip-resize"></div>
+    </div>
+
+    <!-- Mission Control Overlay (for Hot Corners) -->
+    <div class="mission-control-overlay" id="mission-control-overlay">
+      <div class="mc-header">
+        <div class="mc-desktop-strip">
+          <div class="mc-desktop mc-desktop-active">Desktop 1</div>
+          <div class="mc-desktop">Desktop 2</div>
+          <div class="mc-desktop mc-desktop-add">+</div>
+        </div>
+      </div>
+      <div class="mc-windows" id="mc-windows"></div>
+    </div>
+
+    <!-- Launchpad Overlay (for Hot Corners) -->
+    <div class="launchpad-overlay" id="launchpad-overlay">
+      <div class="launchpad-grid" id="launchpad-grid"></div>
+    </div>
+
+    <!-- Clipboard History Panel (Issue #13) -->
+    <div class="clipboard-panel" id="clipboard-panel">
+      <div class="clipboard-header">
+        <h3>Clipboard History</h3>
+        <button class="clipboard-clear-btn" id="clipboard-clear-btn">Clear</button>
+      </div>
+      <div class="clipboard-search">
+        <input type="text" id="clipboard-search-input" placeholder="Search clipboard..." />
+      </div>
+      <div class="clipboard-list" id="clipboard-list">
+        <div class="clipboard-empty">No clipboard history yet</div>
+      </div>
+    </div>
+
+    <!-- Notification Center Panel (Issue #52) -->
+    <div class="notif-panel" id="notif-panel">
+      <div class="notif-header">
+        <h3>Notifications</h3>
+        <div class="notif-header-actions">
+          <button class="notif-dnd-btn" id="notif-dnd-btn" title="Do Not Disturb">🌙</button>
+          <button class="notif-clear-btn" id="notif-clear-all">Clear All</button>
+        </div>
+      </div>
+      <div class="notif-list" id="notif-list">
+        <div class="notif-empty">No new notifications</div>
+      </div>
+      <div class="notif-badge" id="notif-badge" style="display:none;">0</div>
+    </div>
+
+    <!-- Screenshot Overlay (Issue #12) -->
+    <div class="screenshot-overlay" id="screenshot-overlay">
+      <div class="screenshot-toolbar" id="screenshot-toolbar">
+        <button class="ss-mode-btn ss-mode-active" data-ss-mode="fullscreen" title="Capture Entire Screen">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        </button>
+        <button class="ss-mode-btn" data-ss-mode="selection" title="Capture Selected Portion">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="6" width="12" height="12" rx="1" stroke-dasharray="3 2"/></svg>
+        </button>
+        <button class="ss-mode-btn" data-ss-mode="window" title="Capture Selected Window">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18"/><circle cx="6" cy="5.5" r="1" fill="currentColor"/><circle cx="9" cy="5.5" r="1" fill="currentColor"/></svg>
+        </button>
+        <div class="ss-sep"></div>
+        <button class="ss-mode-btn" data-ss-mode="record" title="Record Screen">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#ff3b30"/></svg>
+        </button>
+        <div class="ss-sep"></div>
+        <button class="ss-capture-btn" id="ss-capture-btn">Capture</button>
+        <button class="ss-cancel-btn" id="ss-cancel-btn">✕</button>
+      </div>
+      <div class="screenshot-selection" id="screenshot-selection"></div>
+    </div>
+
+    <!-- Screenshot Thumbnail Preview -->
+    <div class="screenshot-thumb" id="screenshot-thumb">
+      <div class="screenshot-thumb-img" id="screenshot-thumb-img"></div>
+      <div class="screenshot-thumb-label">Screenshot saved</div>
+    </div>
+
+    <!-- Share Sheet Overlay (Issue #56) -->
+    <div class="share-overlay" id="share-overlay">
+      <div class="share-sheet" id="share-sheet">
+        <div class="share-header">
+          <h3>Share</h3>
+          <button class="share-close-btn" id="share-close-btn">✕</button>
+        </div>
+        <div class="share-preview" id="share-preview"></div>
+        <div class="share-targets" id="share-targets"></div>
+        <div class="share-actions">
+          <div class="share-action-item" data-share-action="copy-link">
+            <div class="share-action-icon">🔗</div>
+            <span>Copy Link</span>
+          </div>
+          <div class="share-action-item" data-share-action="save-pdf">
+            <div class="share-action-icon">📄</div>
+            <span>Save as PDF</span>
+          </div>
+          <div class="share-action-item" data-share-action="add-reading-list">
+            <div class="share-action-icon">📖</div>
+            <span>Reading List</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal Window -->
+    <section class="window window-terminal" data-window style="top:80px;left:140px;width:600px;height:400px;z-index:1;display:none;">
+      <div class="window-titlebar window-titlebar-dark" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title" style="color:rgba(255,255,255,0.8);">Terminal</span>
+      </div>
+      <div class="window-content terminal-content" id="terminal-output">
+        <div class="terminal-line terminal-welcome">Last login: Sat Mar 21 2026 on ttys000</div>
+      </div>
+      <div class="terminal-input-row">
+        <span class="terminal-prompt" id="terminal-prompt">user@AuroraOS ~ % </span>
+        <input type="text" class="terminal-input" id="terminal-input" spellcheck="false" autocomplete="off" />
+      </div>
+    </section>
+
+    <!-- Activity Monitor Window -->
+    <section class="window window-activity" data-window style="top:60px;left:100px;width:640px;height:440px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Activity Monitor</span>
+      </div>
+      <div class="window-content activity-content">
+        <div class="activity-tabs">
+          <button class="activity-tab active" data-tab="cpu">CPU</button>
+          <button class="activity-tab" data-tab="memory">Memory</button>
+          <button class="activity-tab" data-tab="disk">Disk</button>
+          <button class="activity-tab" data-tab="network">Network</button>
+        </div>
+        <div class="activity-summary" id="activity-summary"></div>
+        <div class="activity-table">
+          <div class="activity-thead">
+            <span class="activity-col-name">Process Name</span>
+            <span class="activity-col">%CPU</span>
+            <span class="activity-col">Memory</span>
+            <span class="activity-col">Threads</span>
+            <span class="activity-col">PID</span>
+          </div>
+          <div class="activity-tbody" id="activity-tbody"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Disk Utility Window -->
+    <section class="window window-disk" data-window style="top:90px;left:160px;width:580px;height:400px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Disk Utility</span>
+      </div>
+      <div class="window-content disk-content">
+        <div class="disk-sidebar" id="disk-sidebar"></div>
+        <div class="disk-detail" id="disk-detail">
+          <div class="disk-placeholder">Select a disk to view details</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Font Book Window -->
+    <section class="window window-fontbook" data-window style="top:70px;left:180px;width:560px;height:440px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Font Book</span>
+      </div>
+      <div class="window-content fontbook-content">
+        <div class="fontbook-sidebar" id="fontbook-sidebar">
+          <div class="fontbook-collections" id="fontbook-collections"></div>
+        </div>
+        <div class="fontbook-list" id="fontbook-list"></div>
+        <div class="fontbook-preview" id="fontbook-preview">
+          <div class="fontbook-preview-text">The quick brown fox jumps over the lazy dog</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Automator Window -->
+    <section class="window window-automator" data-window style="top:80px;left:120px;width:520px;height:460px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Automator</span>
+      </div>
+      <div class="window-content automator-content">
+        <div class="automator-sidebar">
+          <div class="automator-workflows" id="automator-workflows"></div>
+          <button class="automator-add-btn" id="automator-add-btn">+ New Workflow</button>
+        </div>
+        <div class="automator-detail" id="automator-detail">
+          <div class="automator-placeholder">Select or create a workflow</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Time Machine Window -->
+    <section class="window window-timemachine" data-window style="top:60px;left:100px;width:540px;height:400px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Time Machine</span>
+      </div>
+      <div class="window-content timemachine-content">
+        <div class="tm-status" id="tm-status">
+          <div class="tm-icon">
+            <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+              <circle cx="24" cy="24" r="20" stroke="#34c759" stroke-width="2"/>
+              <path d="M24 14v10l7 4" stroke="#34c759" stroke-width="2" stroke-linecap="round"/>
+              <path d="M10 24A14 14 0 0124 10" stroke="#34c759" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="tm-info">
+            <div class="tm-label">Time Machine</div>
+            <div class="tm-sublabel" id="tm-sublabel">Off</div>
+          </div>
+        </div>
+        <div class="tm-timeline" id="tm-timeline"></div>
+      </div>
+    </section>
+
+    <!-- Network Manager Window -->
+    <section class="window window-network" data-window style="top:50px;left:200px;width:480px;height:420px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Network</span>
+      </div>
+      <div class="window-content network-content">
+        <div class="net-sidebar" id="net-sidebar">
+          <div class="net-item net-active">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0114 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>
+            <span>Wi-Fi</span>
+          </div>
+          <div class="net-item">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L8 6l4 4-4 4 4 4V2z"/></svg>
+            <span>Bluetooth</span>
+          </div>
+          <div class="net-item">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            <span>Ethernet</span>
+          </div>
+        </div>
+        <div class="net-detail" id="net-detail">
+          <div class="net-status" id="net-status"></div>
+          <div class="net-list" id="net-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Accessibility Window -->
+    <section class="window window-accessibility" data-window style="top:70px;left:150px;width:520px;height:460px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Accessibility</span>
+      </div>
+      <div class="window-content a11y-content">
+        <div class="a11y-sidebar">
+          <div class="a11y-cat active" data-a11y="vision">Vision</div>
+          <div class="a11y-cat" data-a11y="hearing">Hearing</div>
+          <div class="a11y-cat" data-a11y="motor">Motor</div>
+        </div>
+        <div class="a11y-detail" id="a11y-detail">
+          <div class="a11y-row"><label>VoiceOver</label><div class="a11y-toggle" id="a11y-voiceover"></div></div>
+          <div class="a11y-row"><label>Font Size</label><input type="range" min="50" max="300" value="100" class="a11y-slider" id="a11y-fontsize" /><span id="a11y-fontsize-val">100%</span></div>
+          <div class="a11y-row"><label>High Contrast</label><div class="a11y-toggle" id="a11y-contrast"></div></div>
+          <div class="a11y-row"><label>Reduce Motion</label><div class="a11y-toggle" id="a11y-motion"></div></div>
+          <div class="a11y-row"><label>Reduce Transparency</label><div class="a11y-toggle" id="a11y-transparency"></div></div>
+          <div class="a11y-row"><label>Invert Colors</label><div class="a11y-toggle" id="a11y-invert"></div></div>
+          <div class="a11y-row"><label>Cursor Size</label><input type="range" min="10" max="40" value="10" class="a11y-slider" id="a11y-cursorsize" /><span id="a11y-cursorsize-val">1.0x</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Finder Tags Panel -->
+    <section class="window window-tags" data-window style="top:90px;left:130px;width:500px;height:380px;z-index:1;display:none;">
+      <div class="window-titlebar" data-titlebar>
+        <div class="window-controls">
+          <span class="ctl ctl-close" data-close></span>
+          <span class="ctl ctl-min" data-min></span>
+          <span class="ctl ctl-max" data-max></span>
+        </div>
+        <span class="window-title">Finder Tags</span>
+      </div>
+      <div class="window-content tags-content">
+        <div class="tags-sidebar" id="tags-sidebar"></div>
+        <div class="tags-files" id="tags-files">
+          <div class="tags-placeholder">Select a tag to view files</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Siri Overlay -->
+    <div class="siri-overlay" id="siri-overlay">
+      <div class="siri-modal">
+        <div class="siri-orb" id="siri-orb">
+          <div class="siri-wave"></div>
+          <div class="siri-wave"></div>
+          <div class="siri-wave"></div>
+        </div>
+        <div class="siri-response" id="siri-response"></div>
+        <input type="text" class="siri-input" id="siri-input" placeholder="Ask Siri anything..." />
+        <div class="siri-suggestions" id="siri-suggestions"></div>
+      </div>
+    </div>
 
     <script src="./app.js"></script>
   </body>
