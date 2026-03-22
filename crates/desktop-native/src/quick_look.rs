@@ -7,6 +7,7 @@ pub enum PreviewKind {
     Text,
     Folder,
     Image,
+    Video,
     Unknown,
 }
 
@@ -79,6 +80,17 @@ pub fn build_preview(path: &Path) -> PreviewData {
             subtitle: ext_label(&ext, "Image"),
             body: format!("Image preview unavailable in this build.\nSize: {size} bytes"),
             kind: PreviewKind::Image,
+        };
+    }
+
+    if matches!(ext.as_str(), "mp4" | "mov" | "mkv" | "avi" | "wmv" | "webm" | "m4v") {
+        let size = path.metadata().map(|meta| meta.len()).unwrap_or(0);
+        return PreviewData {
+            path: path.to_path_buf(),
+            title,
+            subtitle: ext_label(&ext, "Video"),
+            body: format!("Video opened inside Aurora.\nPlayback preview unavailable in this build.\nSize: {size} bytes"),
+            kind: PreviewKind::Video,
         };
     }
 
@@ -223,6 +235,17 @@ mod tests {
         let preview = build_preview(&path);
         assert_eq!(preview.kind, PreviewKind::Image);
         assert!(preview.body.contains("Image preview unavailable"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn video_preview_uses_video_kind() {
+        let dir = test_dir();
+        let path = dir.join("clip.mp4");
+        std::fs::write(&path, [1_u8, 2, 3, 4]).unwrap();
+        let preview = build_preview(&path);
+        assert_eq!(preview.kind, PreviewKind::Video);
+        assert!(preview.body.contains("Video opened inside Aurora"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

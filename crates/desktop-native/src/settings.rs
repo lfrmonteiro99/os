@@ -41,6 +41,11 @@ pub struct AppSettings {
     pub tag_labels: String,
     pub custom_smart_folders: String,
     pub recent_emojis: String,
+    pub music_track_idx: usize,
+    pub music_library_query: String,
+    pub music_shuffle: bool,
+    pub music_repeat_all: bool,
+    pub music_elapsed_seconds: f32,
     pub color_picker_saved_colors: String,
 }
 
@@ -81,6 +86,11 @@ impl Default for AppSettings {
             tag_labels: String::new(),
             custom_smart_folders: String::new(),
             recent_emojis: String::new(),
+            music_track_idx: 0,
+            music_library_query: String::new(),
+            music_shuffle: false,
+            music_repeat_all: true,
+            music_elapsed_seconds: 0.0,
             color_picker_saved_colors: String::new(),
         }
     }
@@ -119,6 +129,7 @@ impl AppSettings {
         self.font_size = self.font_size.clamp(8.0, 32.0);
         self.dock_icon_size = self.dock_icon_size.clamp(32.0, 72.0);
         self.idle_lock_minutes = self.idle_lock_minutes.clamp(1, 120);
+        self.music_elapsed_seconds = self.music_elapsed_seconds.clamp(0.0, 3600.0);
     }
 
     pub fn to_json(&self) -> String {
@@ -159,6 +170,11 @@ impl AppSettings {
                 "  \"tag_labels\": \"{}\",\n",
                 "  \"custom_smart_folders\": \"{}\",\n",
                 "  \"recent_emojis\": \"{}\",\n",
+                "  \"music_track_idx\": {},\n",
+                "  \"music_library_query\": \"{}\",\n",
+                "  \"music_shuffle\": {},\n",
+                "  \"music_repeat_all\": {},\n",
+                "  \"music_elapsed_seconds\": {:.2},\n",
                 "  \"color_picker_saved_colors\": \"{}\"\n",
                 "}}"
             ),
@@ -196,6 +212,11 @@ impl AppSettings {
             self.tag_labels,
             self.custom_smart_folders,
             self.recent_emojis,
+            self.music_track_idx,
+            self.music_library_query,
+            self.music_shuffle,
+            self.music_repeat_all,
+            self.music_elapsed_seconds,
             self.color_picker_saved_colors,
         )
     }
@@ -303,6 +324,21 @@ impl AppSettings {
         }
         if let Some(v) = parse_json_string(json, "recent_emojis") {
             s.recent_emojis = v;
+        }
+        if let Some(v) = parse_json_usize(json, "music_track_idx") {
+            s.music_track_idx = v;
+        }
+        if let Some(v) = parse_json_string(json, "music_library_query") {
+            s.music_library_query = v;
+        }
+        if let Some(v) = parse_json_bool(json, "music_shuffle") {
+            s.music_shuffle = v;
+        }
+        if let Some(v) = parse_json_bool(json, "music_repeat_all") {
+            s.music_repeat_all = v;
+        }
+        if let Some(v) = parse_json_f32(json, "music_elapsed_seconds") {
+            s.music_elapsed_seconds = v;
         }
         if let Some(v) = parse_json_string(json, "color_picker_saved_colors") {
             s.color_picker_saved_colors = v;
@@ -412,6 +448,11 @@ mod tests {
         assert!(s.favorite_paths.is_empty());
         assert!(!s.desktop_use_stacks);
         assert!(s.recent_emojis.is_empty());
+        assert_eq!(s.music_track_idx, 0);
+        assert!(s.music_library_query.is_empty());
+        assert!(!s.music_shuffle);
+        assert!(s.music_repeat_all);
+        assert_eq!(s.music_elapsed_seconds, 0.0);
         assert!(s.color_picker_saved_colors.is_empty());
     }
 
@@ -445,6 +486,11 @@ mod tests {
         original.set_password("secret");
         original.idle_lock_minutes = 10;
         original.favorite_paths = "C:/Users/test/Desktop|C:/Users/test/Documents".to_string();
+        original.music_track_idx = 4;
+        original.music_library_query = "drive".to_string();
+        original.music_shuffle = true;
+        original.music_repeat_all = false;
+        original.music_elapsed_seconds = 87.5;
 
         let json = original.to_json();
         let parsed = AppSettings::from_json(&json);
@@ -463,6 +509,11 @@ mod tests {
             parsed.favorite_paths,
             "C:/Users/test/Desktop|C:/Users/test/Documents"
         );
+        assert_eq!(parsed.music_track_idx, 4);
+        assert_eq!(parsed.music_library_query, "drive");
+        assert!(parsed.music_shuffle);
+        assert!(!parsed.music_repeat_all);
+        assert!((parsed.music_elapsed_seconds - 87.5).abs() < 0.01);
     }
 
     #[test]
@@ -504,6 +555,11 @@ mod tests {
         assert!(json.contains("\"idle_lock_minutes\""));
         assert!(json.contains("\"favorite_paths\""));
         assert!(json.contains("\"recent_emojis\""));
+        assert!(json.contains("\"music_track_idx\""));
+        assert!(json.contains("\"music_library_query\""));
+        assert!(json.contains("\"music_shuffle\""));
+        assert!(json.contains("\"music_repeat_all\""));
+        assert!(json.contains("\"music_elapsed_seconds\""));
         assert!(json.contains("\"color_picker_saved_colors\""));
     }
 
@@ -742,6 +798,22 @@ mod tests {
         s.recent_emojis = "😀|🚀|👍".to_string();
         let parsed = AppSettings::from_json(&s.to_json());
         assert_eq!(parsed.recent_emojis, "😀|🚀|👍");
+    }
+
+    #[test]
+    fn music_player_state_roundtrip() {
+        let mut s = AppSettings::default();
+        s.music_track_idx = 3;
+        s.music_library_query = "focus".to_string();
+        s.music_shuffle = true;
+        s.music_repeat_all = false;
+        s.music_elapsed_seconds = 42.25;
+        let parsed = AppSettings::from_json(&s.to_json());
+        assert_eq!(parsed.music_track_idx, 3);
+        assert_eq!(parsed.music_library_query, "focus");
+        assert!(parsed.music_shuffle);
+        assert!(!parsed.music_repeat_all);
+        assert!((parsed.music_elapsed_seconds - 42.25).abs() < 0.01);
     }
 
     // ── parse_json_string ───────────────────────────────────────────

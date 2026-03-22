@@ -15,6 +15,7 @@ mod file_tags;
 mod font_book;
 mod icons;
 mod messages;
+mod music_audio;
 mod network_diag;
 mod notifications;
 mod process_manager;
@@ -75,6 +76,7 @@ use file_index::{
 use file_tags::{FileTags, TagColor};
 use font_book::FontBookApp;
 use messages::MessagesState;
+use music_audio::MusicAudioEngine;
 use network_diag::NetworkDiagnostics;
 use notifications::NotificationCenter;
 use process_manager::ProcessManager;
@@ -754,6 +756,8 @@ struct AuroraDesktopApp {
     music_repeat_all: bool,
     music_elapsed_seconds: f32,
     music_last_tick: Instant,
+    music_audio: Option<MusicAudioEngine>,
+    music_override_path: Option<PathBuf>,
     // Text editor state
     editor_file_path: Option<PathBuf>,
     editor_content: String,
@@ -961,6 +965,14 @@ enum AssistantOverlayState {
     Thinking,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MusicAudioAction {
+    Stop,
+    Pause,
+    Resume,
+    PlayFromOffset,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum SpotlightInlineKind {
     Calculation,
@@ -1148,12 +1160,14 @@ impl AuroraDesktopApp {
             }],
             notes_active_tab: 0,
             music_playing: false,
-            music_track_idx: 0,
-            music_library_query: String::new(),
-            music_shuffle: false,
-            music_repeat_all: true,
-            music_elapsed_seconds: 0.0,
+            music_track_idx: loaded_settings.music_track_idx,
+            music_library_query: loaded_settings.music_library_query.clone(),
+            music_shuffle: loaded_settings.music_shuffle,
+            music_repeat_all: loaded_settings.music_repeat_all,
+            music_elapsed_seconds: loaded_settings.music_elapsed_seconds,
             music_last_tick: Instant::now(),
+            music_audio: MusicAudioEngine::new().ok(),
+            music_override_path: None,
             editor_file_path: None,
             editor_content: String::new(),
             editor_modified: false,
@@ -1448,6 +1462,33 @@ impl AuroraDesktopApp {
 
     fn persist_recent_emojis(&mut self) {
         self.app_settings.recent_emojis = self.recent_emojis.join("|");
+    }
+
+    fn persist_music_state(&mut self) {
+        self.app_settings.music_track_idx = self.music_track_idx;
+        self.app_settings.music_library_query = self.music_library_query.clone();
+        self.app_settings.music_shuffle = self.music_shuffle;
+        self.app_settings.music_repeat_all = self.music_repeat_all;
+        self.app_settings.music_elapsed_seconds = self.music_elapsed_seconds;
+    }
+
+    fn desired_music_audio_action(
+        active_path: Option<&std::path::Path>,
+        target_path: Option<&std::path::Path>,
+        should_play: bool,
+        force_restart: bool,
+    ) -> MusicAudioAction {
+        match (active_path, target_path, should_play, force_restart) {
+            (_, None, _, _) => MusicAudioAction::Stop,
+            (_, Some(_), false, _) => MusicAudioAction::Pause,
+            (_, Some(_), true, true) => MusicAudioAction::PlayFromOffset,
+            (Some(active), Some(target), true, false) if active == target => {
+                MusicAudioAction::Resume
+            }
+            (Some(_), Some(_), true, false) | (None, Some(_), true, false) => {
+                MusicAudioAction::PlayFromOffset
+            }
+        }
     }
 
     fn parse_tag_labels(settings: &AppSettings) -> Vec<(TagColor, String)> {
@@ -2100,6 +2141,104 @@ impl AuroraDesktopApp {
         paths
     }
 
+    fn is_supported_audio_path(path: &std::path::Path) -> bool {
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| {
+                matches!(
+                    ext.to_ascii_lowercase().as_str(),
+                    "mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    fn is_supported_video_path(path: &std::path::Path) -> bool {
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| {
+                matches!(
+                    ext.to_ascii_lowercase().as_str(),
+                    "mp4" | "mov" | "mkv" | "avi" | "wmv" | "webm" | "m4v"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    fn music_library_track_idx_for_path(
+        real_tracks: &[PathBuf],
+        path: &std::path::Path,
+    ) -> Option<usize> {
+        real_tracks.iter().position(|track| track == path)
+    }
+
+    fn current_music_path(&self, real_tracks: &[PathBuf]) -> Option<PathBuf> {
+        if let Some(path) = &self.music_override_path {
+            Some(path.clone())
+        } else if real_tracks.is_empty() {
+            None
+        } else {
+            Some(
+                real_tracks[Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len())]
+                    .clone(),
+            )
+        }
+    }
+
+    fn open_audio_path_in_music_player(&mut self, path: PathBuf) {
+        let real_tracks = Self::music_library_paths(&dirs_home());
+        if let Some(idx) = Self::music_library_track_idx_for_path(&real_tracks, &path) {
+            self.music_track_idx = idx;
+            self.music_override_path = None;
+        } else {
+            self.music_override_path = Some(path);
+        }
+        self.music_playing = true;
+        self.music_elapsed_seconds = 0.0;
+        self.music_last_tick = Instant::now();
+        self.persist_music_state();
+        self.sync_music_audio(true);
+        let win = self.window_mut(WindowKind::MusicPlayer);
+        win.open = true;
+        win.minimized = false;
+        self.bring_to_front(WindowKind::MusicPlayer);
+    }
+
+    fn open_video_path_in_quick_look(&mut self, path: PathBuf) {
+        self.quick_look_paths = vec![path];
+        self.quick_look_index = 0;
+        self.quick_look_open = true;
+    }
+
+    fn open_url_in_browser(&mut self, url: &str) {
+        self.browser_state.navigate(url);
+        self.browser_url_input = self.browser_state.url.clone();
+        let win = self.window_mut(WindowKind::Browser);
+        win.open = true;
+        win.minimized = false;
+        self.bring_to_front(WindowKind::Browser);
+    }
+
+    fn looks_like_browser_target(target: &str) -> bool {
+        let trimmed = target.trim();
+        trimmed.starts_with("http://")
+            || trimmed.starts_with("https://")
+            || trimmed.starts_with("auroraos://")
+            || trimmed.contains('.')
+    }
+
+    fn open_path_in_aurora_if_supported(&mut self, path: &std::path::Path) -> bool {
+        if Self::is_supported_audio_path(path) {
+            self.open_audio_path_in_music_player(path.to_path_buf());
+            true
+        } else if Self::is_supported_video_path(path) {
+            self.open_video_path_in_quick_look(path.to_path_buf());
+            true
+        } else {
+            false
+        }
+    }
+
     fn decode_photo_color_image(path: &std::path::Path) -> Option<ColorImage> {
         let image = image::open(path).ok()?;
         let image = if image.width() > 512 || image.height() > 512 {
@@ -2334,6 +2473,78 @@ impl AuroraDesktopApp {
             PathBuf::from(format!("__OPEN_TAB__{}", path.display()))
         } else {
             path.to_path_buf()
+        }
+    }
+
+    fn file_manager_open_entry_navigation(
+        entry: &FmEntry,
+        open_in_new_tab: bool,
+    ) -> Option<PathBuf> {
+        if entry.is_dir {
+            Some(Self::file_manager_directory_navigation(
+                &entry.path,
+                open_in_new_tab,
+            ))
+        } else {
+            let ext = entry
+                .path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            let is_text = matches!(
+                ext,
+                "rs" | "py"
+                    | "js"
+                    | "ts"
+                    | "c"
+                    | "cpp"
+                    | "h"
+                    | "go"
+                    | "java"
+                    | "md"
+                    | "txt"
+                    | "log"
+                    | "csv"
+                    | "json"
+                    | "toml"
+                    | "yaml"
+                    | "yml"
+                    | "html"
+                    | "css"
+                    | "xml"
+                    | "sh"
+                    | "bat"
+                    | "cmd"
+                    | "ps1"
+                    | "cfg"
+                    | "ini"
+                    | "conf"
+                    | "env"
+                    | "gitignore"
+                    | "lock"
+                    | "sql"
+                    | "lua"
+                    | "rb"
+            );
+            if is_text {
+                Some(PathBuf::from(format!(
+                    "__OPEN_EDITOR__{}",
+                    entry.path.display()
+                )))
+            } else if Self::is_supported_audio_path(&entry.path) {
+                Some(PathBuf::from(format!(
+                    "__OPEN_MUSIC__{}",
+                    entry.path.display()
+                )))
+            } else if Self::is_supported_video_path(&entry.path) {
+                Some(PathBuf::from(format!(
+                    "__OPEN_VIDEO__{}",
+                    entry.path.display()
+                )))
+            } else {
+                open_file_with_system(&entry.path);
+                None
+            }
         }
     }
 
@@ -3133,6 +3344,7 @@ impl AuroraDesktopApp {
             AssistantIntent::Weather => Self::assistant_weather_summary().to_string(),
             AssistantIntent::PlaySong(song) => {
                 let real_tracks = Self::music_library_paths(&dirs_home());
+                self.music_override_path = None;
                 if let Some(song_name) = song {
                     if let Some(idx) = Self::assistant_track_match_with_paths(&song_name, &real_tracks)
                     {
@@ -3196,6 +3408,8 @@ impl AuroraDesktopApp {
     fn reset_music_progress(&mut self) {
         self.music_elapsed_seconds = 0.0;
         self.music_last_tick = Instant::now();
+        self.persist_music_state();
+        self.sync_music_audio(true);
     }
 
     fn maybe_tick_music_playback(&mut self) {
@@ -3207,26 +3421,26 @@ impl AuroraDesktopApp {
         }
 
         let real_tracks = Self::music_library_paths(&dirs_home());
-        let using_real_tracks = !real_tracks.is_empty();
+        let current_track_path = self.current_music_path(&real_tracks);
+        let using_real_tracks = !real_tracks.is_empty() && self.music_override_path.is_none();
         let filtered_indices = if using_real_tracks {
             Self::music_queue_indices(&real_tracks, &self.music_library_query, self.music_shuffle)
         } else {
             Vec::new()
         };
-        let current_real_track = using_real_tracks.then(|| {
-            &real_tracks[Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len())]
-        });
         let duration = Self::music_track_duration_seconds(
             self.music_track_idx,
-            current_real_track.map(|p| p.as_path()),
+            current_track_path.as_deref(),
         );
         let (elapsed, finished) =
             Self::advance_music_elapsed(self.music_elapsed_seconds, delta, duration);
         if !finished {
             self.music_elapsed_seconds = elapsed;
+            self.persist_music_state();
             return;
         }
 
+        let mut should_restart_audio = false;
         let next_idx = if using_real_tracks {
             Self::step_music_track_idx_with_repeat(
                 self.music_track_idx,
@@ -3234,6 +3448,11 @@ impl AuroraDesktopApp {
                 1,
                 self.music_repeat_all,
             )
+        } else if self.music_override_path.is_some() {
+            if self.music_repeat_all {
+                should_restart_audio = true;
+            }
+            None
         } else if self.music_repeat_all {
             Some((self.music_track_idx + 1) % 5)
         } else if self.music_track_idx + 1 < 5 {
@@ -3244,10 +3463,50 @@ impl AuroraDesktopApp {
 
         if let Some(idx) = next_idx {
             self.music_track_idx = idx;
+            self.music_override_path = None;
+            self.music_elapsed_seconds = 0.0;
+            should_restart_audio = true;
+        } else if should_restart_audio {
             self.music_elapsed_seconds = 0.0;
         } else {
             self.music_elapsed_seconds = duration;
             self.music_playing = false;
+        }
+        self.persist_music_state();
+        if should_restart_audio && self.music_playing {
+            self.music_last_tick = Instant::now();
+            self.sync_music_audio(true);
+        }
+    }
+
+    fn sync_music_audio(&mut self, force_restart: bool) {
+        let real_tracks = Self::music_library_paths(&dirs_home());
+        let target_path = self.current_music_path(&real_tracks);
+
+        let action = Self::desired_music_audio_action(
+            self.music_audio
+                .as_ref()
+                .and_then(|engine| engine.active_path()),
+            target_path.as_deref(),
+            self.music_playing,
+            force_restart,
+        );
+
+        let Some(engine) = self.music_audio.as_mut() else {
+            return;
+        };
+
+        match action {
+            MusicAudioAction::Stop => engine.stop(),
+            MusicAudioAction::Pause => engine.pause(),
+            MusicAudioAction::Resume => engine.resume(),
+            MusicAudioAction::PlayFromOffset => {
+                if let Some(path) = target_path.as_deref() {
+                    let _ = engine.play_file(path, self.music_elapsed_seconds);
+                } else {
+                    engine.stop();
+                }
+            }
         }
     }
 
@@ -5328,7 +5587,7 @@ impl AuroraDesktopApp {
                 win.restore();
                 win.id_epoch = win.id_epoch.saturating_add(1);
                 self.bring_to_front(WindowKind::FileManager);
-            } else {
+            } else if !self.open_path_in_aurora_if_supported(&path) {
                 open_file_with_system(&path);
             }
         }
@@ -5403,7 +5662,7 @@ impl AuroraDesktopApp {
                                                     win.restore();
                                                     win.id_epoch = win.id_epoch.saturating_add(1);
                                                     self.bring_to_front(WindowKind::FileManager);
-                                                } else {
+                                                } else if !self.open_path_in_aurora_if_supported(&path) {
                                                     open_file_with_system(&path);
                                                 }
                                             }
@@ -6223,7 +6482,25 @@ impl AuroraDesktopApp {
                 if let Some(path) = parts.get(1) {
                     let p = std::path::Path::new(path);
                     if p.exists() {
-                        open_file_with_system(p);
+                        if Self::is_supported_audio_path(p) {
+                            out.push((
+                                format!("__OPEN_MUSIC__{}", p.display()),
+                                Color32::TRANSPARENT,
+                            ));
+                        } else if Self::is_supported_video_path(p) {
+                            out.push((
+                                format!("__OPEN_VIDEO__{}", p.display()),
+                                Color32::TRANSPARENT,
+                            ));
+                        } else {
+                            open_file_with_system(p);
+                        }
+                        out.push((format!("Opening {path}..."), white));
+                    } else if Self::looks_like_browser_target(path) {
+                        out.push((
+                            format!("__OPEN_BROWSER__{}", path),
+                            Color32::TRANSPARENT,
+                        ));
                         out.push((format!("Opening {path}..."), white));
                     } else {
                         out.push((format!("open: no such file: {path}"), red));
@@ -6234,10 +6511,25 @@ impl AuroraDesktopApp {
             }
             "run" => {
                 if let Some(program) = parts.get(1) {
-                    let args: Vec<&str> = parts[2..].to_vec();
-                    match launch_program(program, &args) {
-                        Ok(()) => out.push((format!("Launched {program}"), white)),
-                        Err(e) => out.push((e, red)),
+                    let candidate = std::path::Path::new(program);
+                    if candidate.exists() && Self::is_supported_audio_path(candidate) {
+                        out.push((
+                            format!("__OPEN_MUSIC__{}", candidate.display()),
+                            Color32::TRANSPARENT,
+                        ));
+                        out.push((format!("Opening {}...", candidate.display()), white));
+                    } else if candidate.exists() && Self::is_supported_video_path(candidate) {
+                        out.push((
+                            format!("__OPEN_VIDEO__{}", candidate.display()),
+                            Color32::TRANSPARENT,
+                        ));
+                        out.push((format!("Opening {}...", candidate.display()), white));
+                    } else {
+                        let args: Vec<&str> = parts[2..].to_vec();
+                        match launch_program(program, &args) {
+                            Ok(()) => out.push((format!("Launched {program}"), white)),
+                            Err(e) => out.push((e, red)),
+                        }
                     }
                 } else {
                     out.push(("Usage: run <program> [args...]".into(), gray));
@@ -7113,64 +7405,6 @@ impl AuroraDesktopApp {
                     ui.add_space(6.0);
                 }
 
-                let mut open_entry = |entry: &FmEntry, open_in_new_tab: bool| {
-                    if entry.is_dir {
-                        navigate_to = Some(AuroraDesktopApp::file_manager_directory_navigation(
-                            &entry.path,
-                            open_in_new_tab,
-                        ));
-                    } else {
-                        let ext = entry
-                            .path
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .unwrap_or("");
-                        let is_text = matches!(
-                            ext,
-                            "rs" | "py"
-                                | "js"
-                                | "ts"
-                                | "c"
-                                | "cpp"
-                                | "h"
-                                | "go"
-                                | "java"
-                                | "md"
-                                | "txt"
-                                | "log"
-                                | "csv"
-                                | "json"
-                                | "toml"
-                                | "yaml"
-                                | "yml"
-                                | "html"
-                                | "css"
-                                | "xml"
-                                | "sh"
-                                | "bat"
-                                | "cmd"
-                                | "ps1"
-                                | "cfg"
-                                | "ini"
-                                | "conf"
-                                | "env"
-                                | "gitignore"
-                                | "lock"
-                                | "sql"
-                                | "lua"
-                                | "rb"
-                        );
-                        if is_text {
-                            navigate_to = Some(PathBuf::from(format!(
-                                "__OPEN_EDITOR__{}",
-                                entry.path.display()
-                            )));
-                        } else {
-                            open_file_with_system(&entry.path);
-                        }
-                    }
-                };
-
                 // File/folder list
                 if *view_mode == FileManagerViewMode::Icon {
                     egui::ScrollArea::vertical().show(ui, |ui| {
@@ -7215,7 +7449,7 @@ impl AuroraDesktopApp {
                                     *selected_path = Some(entry.path.clone());
                                 }
                                 if resp.double_clicked() {
-                                    open_entry(
+                                    navigate_to = Self::file_manager_open_entry_navigation(
                                         entry,
                                         ui.input(|i| i.modifiers.command || i.modifiers.ctrl),
                                     );
@@ -7319,7 +7553,7 @@ impl AuroraDesktopApp {
                                     *selected_path = Some(entry.path.clone());
                                 }
                                 if resp.double_clicked() {
-                                    open_entry(
+                                    navigate_to = Self::file_manager_open_entry_navigation(
                                         entry,
                                         ui.input(|i| i.modifiers.command || i.modifiers.ctrl),
                                     );
@@ -7346,7 +7580,7 @@ impl AuroraDesktopApp {
                                     *selected_path = Some(entry.path.clone());
                                 }
                                 if resp.double_clicked() {
-                                    open_entry(
+                                    navigate_to = Self::file_manager_open_entry_navigation(
                                         entry,
                                         ui.input(|i| i.modifiers.command || i.modifiers.ctrl),
                                     );
@@ -7508,12 +7742,18 @@ impl AuroraDesktopApp {
                                 Id::new(("fm_entry", &entry.name)),
                                 Sense::click_and_drag(),
                             );
+                            let open_in_new_tab =
+                                ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
                             if resp.clicked() {
                                 *selected_path = Some(entry.path.clone());
                             }
                             if resp.dragged() {
                                 *selected_path = Some(entry.path.clone());
                                 *dragged_path = Some(entry.path.clone());
+                            }
+                            if resp.double_clicked() {
+                                navigate_to =
+                                    Self::file_manager_open_entry_navigation(entry, open_in_new_tab);
                             }
                             if let Some(dragged) = dragged_path.clone() {
                                 if entry.is_dir && resp.hovered() {
@@ -7561,68 +7801,6 @@ impl AuroraDesktopApp {
                                         });
                                         *dragged_path = None;
                                         *selected_path = None;
-                                    }
-                                }
-                            }
-
-                            if resp.double_clicked() {
-                                if entry.is_dir {
-                                    let open_in_new_tab =
-                                        ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
-                                    navigate_to =
-                                        Some(AuroraDesktopApp::file_manager_directory_navigation(
-                                            &entry.path,
-                                            open_in_new_tab,
-                                        ));
-                                } else {
-                                    // Text-like files open in built-in editor; others with system app
-                                    let ext = entry
-                                        .path
-                                        .extension()
-                                        .and_then(|e| e.to_str())
-                                        .unwrap_or("");
-                                    let is_text = matches!(
-                                        ext,
-                                        "rs" | "py"
-                                            | "js"
-                                            | "ts"
-                                            | "c"
-                                            | "cpp"
-                                            | "h"
-                                            | "go"
-                                            | "java"
-                                            | "md"
-                                            | "txt"
-                                            | "log"
-                                            | "csv"
-                                            | "json"
-                                            | "toml"
-                                            | "yaml"
-                                            | "yml"
-                                            | "html"
-                                            | "css"
-                                            | "xml"
-                                            | "sh"
-                                            | "bat"
-                                            | "cmd"
-                                            | "ps1"
-                                            | "cfg"
-                                            | "ini"
-                                            | "conf"
-                                            | "env"
-                                            | "gitignore"
-                                            | "lock"
-                                            | "sql"
-                                            | "lua"
-                                            | "rb"
-                                    );
-                                    if is_text {
-                                        navigate_to = Some(PathBuf::from(format!(
-                                            "__OPEN_EDITOR__{}",
-                                            entry.path.display()
-                                        )));
-                                    } else {
-                                        open_file_with_system(&entry.path);
                                     }
                                 }
                             }
@@ -9020,24 +9198,18 @@ impl AuroraDesktopApp {
             ("Night Drive", "Electronic", Color32::from_rgb(0, 122, 255)),
         ];
         let real_tracks = Self::music_library_paths(&dirs_home());
+        let current_track_path = self.current_music_path(&real_tracks);
         let using_real_tracks = !real_tracks.is_empty();
         let filtered_indices = if using_real_tracks {
             Self::music_queue_indices(&real_tracks, &self.music_library_query, self.music_shuffle)
         } else {
             Vec::new()
         };
-        let current_real_track = using_real_tracks.then(|| {
-            &real_tracks[Self::normalize_music_track_idx(self.music_track_idx, real_tracks.len())]
-        });
-        let (name, artist, color) = if using_real_tracks {
+        let (name, artist, color) = if let Some(path) = current_track_path.as_deref() {
             (
-                current_real_track
-                    .map(|path| Self::music_track_title(path))
-                    .unwrap_or_else(|| "Audio Track".to_string()),
+                Self::music_track_title(path),
                 "Local Music Library",
-                current_real_track
-                    .map(|path| Self::music_track_color_for_path(path))
-                    .unwrap_or(Color32::from_rgb(255, 55, 95)),
+                Self::music_track_color_for_path(path),
             )
         } else {
             let (name, artist, color) = Self::music_track_info(self.music_track_idx);
@@ -9045,7 +9217,7 @@ impl AuroraDesktopApp {
         };
         let duration_seconds = Self::music_track_duration_seconds(
             self.music_track_idx,
-            current_real_track.map(|p| p.as_path()),
+            current_track_path.as_deref(),
         );
         let progress = if duration_seconds > 0.0 {
             (self.music_elapsed_seconds / duration_seconds).clamp(0.0, 1.0)
@@ -9086,7 +9258,7 @@ impl AuroraDesktopApp {
                         .size(12.0)
                         .color(Color32::from_gray(150)),
                 );
-                if let Some(path) = current_real_track {
+                if let Some(path) = current_track_path.as_deref() {
                     if let Some(metadata) = Self::music_track_metadata_label(path) {
                         ui.label(
                             RichText::new(metadata)
@@ -9118,6 +9290,8 @@ impl AuroraDesktopApp {
                 let fraction = Self::music_seek_fraction(bar_rect, pointer.x);
                 self.music_elapsed_seconds = Self::music_seek_seconds(duration_seconds, fraction);
                 self.music_last_tick = Instant::now();
+                self.persist_music_state();
+                self.sync_music_audio(true);
             }
         }
         ui.horizontal(|ui| {
@@ -9140,12 +9314,14 @@ impl AuroraDesktopApp {
         ui.horizontal(|ui| {
             if ui.selectable_label(self.music_shuffle, "Shuffle").clicked() {
                 self.music_shuffle = !self.music_shuffle;
+                self.persist_music_state();
             }
             if ui
                 .selectable_label(self.music_repeat_all, "Repeat")
                 .clicked()
             {
                 self.music_repeat_all = !self.music_repeat_all;
+                self.persist_music_state();
             }
         });
 
@@ -9202,6 +9378,7 @@ impl AuroraDesktopApp {
             {
                 self.music_playing = !self.music_playing;
                 self.music_last_tick = Instant::now();
+                self.persist_music_state();
             }
             // Next
             if ui
@@ -9257,11 +9434,14 @@ impl AuroraDesktopApp {
         );
         ui.add_space(4.0);
         if using_real_tracks {
-            ui.add(
+            let search_resp = ui.add(
                 egui::TextEdit::singleline(&mut self.music_library_query)
                     .hint_text("Search local library")
                     .desired_width(f32::INFINITY),
             );
+            if search_resp.changed() {
+                self.persist_music_state();
+            }
             ui.add_space(6.0);
         }
 
@@ -9279,11 +9459,7 @@ impl AuroraDesktopApp {
                     }
                     for i in filtered_indices {
                         let path = &real_tracks[i];
-                        let is_current = i
-                            == Self::normalize_music_track_idx(
-                                self.music_track_idx,
-                                real_tracks.len(),
-                            );
+                        let is_current = current_track_path.as_deref() == Some(path.as_path());
                         let track_color = Self::music_track_color_for_path(path);
                         let bg = if is_current {
                             Color32::from_rgba_unmultiplied(255, 255, 255, 15)
@@ -9300,7 +9476,9 @@ impl AuroraDesktopApp {
                                         ui.allocate_exact_size(Vec2::splat(8.0), Sense::hover());
                                     ui.painter().circle_filled(dot_r.center(), 4.0, track_color);
                                     if is_current && self.music_playing {
-                                        ui.label(RichText::new("♪").size(11.0).color(color));
+                                        ui.label(
+                                            RichText::new("♪").size(11.0).color(track_color),
+                                        );
                                     }
                                     ui.vertical(|ui| {
                                         let name_color = if is_current {
@@ -9329,17 +9507,15 @@ impl AuroraDesktopApp {
                                         );
                                     });
                                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                        if ui.small_button("Open").clicked() {
-                                            open_file_with_system(path);
+                                        if ui.small_button("Play").clicked() {
+                                            self.open_audio_path_in_music_player(path.clone());
                                         }
                                     });
                                 });
                             })
                             .response;
                         if resp.interact(Sense::click()).clicked() {
-                            self.music_track_idx = i;
-                            self.music_playing = true;
-                            self.reset_music_progress();
+                            self.open_audio_path_in_music_player(path.clone());
                         }
                     }
                 } else {
@@ -9382,6 +9558,7 @@ impl AuroraDesktopApp {
                             .response;
                         if resp.interact(Sense::click()).clicked() {
                             self.music_track_idx = i;
+                            self.music_override_path = None;
                             self.music_playing = true;
                             self.reset_music_progress();
                         }
@@ -11700,6 +11877,10 @@ impl AuroraDesktopApp {
                 self.sync_active_tab_from_file_manager();
             } else if let Some(file_path) = path_str.strip_prefix("__OPEN_EDITOR__") {
                 self.open_file_in_editor(PathBuf::from(file_path));
+            } else if let Some(file_path) = path_str.strip_prefix("__OPEN_MUSIC__") {
+                self.open_audio_path_in_music_player(PathBuf::from(file_path));
+            } else if let Some(file_path) = path_str.strip_prefix("__OPEN_VIDEO__") {
+                self.open_video_path_in_quick_look(PathBuf::from(file_path));
             } else {
                 self.navigate_file_manager_to(path.clone(), true);
             }
@@ -11711,7 +11892,17 @@ impl AuroraDesktopApp {
             if output.len() == 1 && output[0].0 == "__CLEAR__" {
                 self.terminal_output.clear();
             } else {
-                self.terminal_output.extend(output);
+                for (line, color) in output {
+                    if let Some(file_path) = line.strip_prefix("__OPEN_MUSIC__") {
+                        self.open_audio_path_in_music_player(PathBuf::from(file_path));
+                    } else if let Some(file_path) = line.strip_prefix("__OPEN_VIDEO__") {
+                        self.open_video_path_in_quick_look(PathBuf::from(file_path));
+                    } else if let Some(url) = line.strip_prefix("__OPEN_BROWSER__") {
+                        self.open_url_in_browser(url);
+                    } else {
+                        self.terminal_output.push((line, color));
+                    }
+                }
             }
             self.sync_active_tab_from_globals(WindowKind::Terminal);
         }
@@ -12139,7 +12330,9 @@ impl AuroraDesktopApp {
                                             .response;
                                         if resp.interact(Sense::click()).clicked() {
                                             let path = dl_dir.join(name);
-                                            open_file_with_system(&path);
+                                            if !self.open_path_in_aurora_if_supported(&path) {
+                                                open_file_with_system(&path);
+                                            }
                                             self.show_downloads_stack = false;
                                         }
                                         ui.add_space(1.0);
@@ -14891,6 +15084,7 @@ impl AuroraDesktopApp {
         self.app_settings.color_picker_saved_colors = self.color_picker.serialized_favorites();
         self.persist_sidebar_favorites();
         self.persist_recent_emojis();
+        self.persist_music_state();
         let _ = self.app_settings.save();
         let _ = self.file_tags.save();
     }
@@ -15050,13 +15244,8 @@ impl AuroraDesktopApp {
                     match &pip.source {
                         PipSource::Music => {
                             let real_tracks = Self::music_library_paths(&dirs_home());
-                            let current_real_track = (!real_tracks.is_empty()).then(|| {
-                                &real_tracks[Self::normalize_music_track_idx(
-                                    self.music_track_idx,
-                                    real_tracks.len(),
-                                )]
-                            });
-                            let (name, artist, color) = if let Some(path) = current_real_track {
+                            let current_track_path = self.current_music_path(&real_tracks);
+                            let (name, artist, color) = if let Some(path) = current_track_path.as_deref() {
                                 (
                                     Self::music_track_title(path),
                                     "Local Music Library",
@@ -15103,7 +15292,7 @@ impl AuroraDesktopApp {
                                     .size(11.0)
                                     .color(Color32::from_gray(180)),
                             );
-                            if let Some(path) = current_real_track {
+                            if let Some(path) = current_track_path.as_deref() {
                                 if let Some(metadata) = Self::music_track_metadata_label(path) {
                                     ui.label(
                                         RichText::new(metadata)
@@ -15119,6 +15308,7 @@ impl AuroraDesktopApp {
                             {
                                 self.music_playing = !self.music_playing;
                                 self.music_last_tick = Instant::now();
+                                self.persist_music_state();
                             }
                         }
                         PipSource::Photo(idx) => {
@@ -15836,6 +16026,7 @@ impl eframe::App for AuroraDesktopApp {
         self.handle_battery_alerts();
         self.maybe_process_assistant_query();
         self.maybe_tick_music_playback();
+        self.sync_music_audio(false);
         if self.music_playing {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
@@ -16399,7 +16590,7 @@ impl eframe::App for AuroraDesktopApp {
             );
             if is_text {
                 self.open_file_in_editor(path);
-            } else {
+            } else if !self.open_path_in_aurora_if_supported(&path) {
                 open_file_with_system(&path);
                 self.toast_manager.push(Toast::new(
                     "File Opened",
@@ -16464,6 +16655,7 @@ impl eframe::App for AuroraDesktopApp {
                                     &pb.to_string_lossy(),
                                     Color32::from_rgb(52, 199, 89),
                                 );
+                            } else if self.open_path_in_aurora_if_supported(&pb) {
                             } else {
                                 open_file_with_system(&pb);
                             }
@@ -16608,6 +16800,118 @@ mod tests {
         assert!(out
             .iter()
             .any(|(line, _)| line.contains("unknown subcommand")));
+    }
+
+    #[test]
+    fn terminal_cmd_open_audio_returns_music_token() {
+        let si = RealSystemInfo::new();
+        let root = std::env::temp_dir().join(format!(
+            "aurora_terminal_open_audio_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("track.mp3");
+        std::fs::write(&path, b"audio").unwrap();
+
+        let out =
+            AuroraDesktopApp::execute_terminal_command(&format!("open {}", path.display()), &si);
+
+        assert!(out
+            .iter()
+            .any(|(line, _)| line == &format!("__OPEN_MUSIC__{}", path.display())));
+        assert!(out
+            .iter()
+            .any(|(line, _)| line.contains(&format!("Opening {}", path.display()))));
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&root);
+    }
+
+    #[test]
+    fn terminal_cmd_run_audio_returns_music_token() {
+        let si = RealSystemInfo::new();
+        let root = std::env::temp_dir().join(format!(
+            "aurora_terminal_run_audio_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("track.flac");
+        std::fs::write(&path, b"audio").unwrap();
+
+        let out =
+            AuroraDesktopApp::execute_terminal_command(&format!("run {}", path.display()), &si);
+
+        assert!(out
+            .iter()
+            .any(|(line, _)| line == &format!("__OPEN_MUSIC__{}", path.display())));
+        assert!(out
+            .iter()
+            .any(|(line, _)| line.contains(&format!("Opening {}", path.display()))));
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&root);
+    }
+
+    #[test]
+    fn terminal_cmd_open_video_returns_video_token() {
+        let si = RealSystemInfo::new();
+        let root = std::env::temp_dir().join(format!(
+            "aurora_terminal_open_video_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("clip.mp4");
+        std::fs::write(&path, b"video").unwrap();
+
+        let out =
+            AuroraDesktopApp::execute_terminal_command(&format!("open {}", path.display()), &si);
+
+        assert!(out
+            .iter()
+            .any(|(line, _)| line == &format!("__OPEN_VIDEO__{}", path.display())));
+        assert!(out
+            .iter()
+            .any(|(line, _)| line.contains(&format!("Opening {}", path.display()))));
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&root);
+    }
+
+    #[test]
+    fn terminal_cmd_run_video_returns_video_token() {
+        let si = RealSystemInfo::new();
+        let root = std::env::temp_dir().join(format!(
+            "aurora_terminal_run_video_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("clip.mkv");
+        std::fs::write(&path, b"video").unwrap();
+
+        let out =
+            AuroraDesktopApp::execute_terminal_command(&format!("run {}", path.display()), &si);
+
+        assert!(out
+            .iter()
+            .any(|(line, _)| line == &format!("__OPEN_VIDEO__{}", path.display())));
+        assert!(out
+            .iter()
+            .any(|(line, _)| line.contains(&format!("Opening {}", path.display()))));
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&root);
+    }
+
+    #[test]
+    fn terminal_cmd_open_url_returns_browser_token() {
+        let si = RealSystemInfo::new();
+        let out = AuroraDesktopApp::execute_terminal_command("open github.com", &si);
+        assert!(out
+            .iter()
+            .any(|(line, _)| line == "__OPEN_BROWSER__github.com"));
+        assert!(out
+            .iter()
+            .any(|(line, _)| line.contains("Opening github.com")));
     }
 
     #[test]
@@ -17532,6 +17836,32 @@ mod tests {
         assert_eq!(AuroraDesktopApp::music_seek_seconds(200.0, 0.25), 50.0);
         assert_eq!(AuroraDesktopApp::music_seek_seconds(200.0, -1.0), 0.0);
         assert_eq!(AuroraDesktopApp::music_seek_seconds(200.0, 2.0), 200.0);
+    }
+
+    #[test]
+    fn desired_music_audio_action_matches_target_and_play_state() {
+        let active = std::path::Path::new("C:/Music/current.mp3");
+        let other = std::path::Path::new("C:/Music/other.mp3");
+        assert_eq!(
+            AuroraDesktopApp::desired_music_audio_action(Some(active), Some(active), true, false),
+            MusicAudioAction::Resume
+        );
+        assert_eq!(
+            AuroraDesktopApp::desired_music_audio_action(Some(active), Some(other), true, false),
+            MusicAudioAction::PlayFromOffset
+        );
+        assert_eq!(
+            AuroraDesktopApp::desired_music_audio_action(Some(active), Some(active), false, false),
+            MusicAudioAction::Pause
+        );
+        assert_eq!(
+            AuroraDesktopApp::desired_music_audio_action(Some(active), None, true, false),
+            MusicAudioAction::Stop
+        );
+        assert_eq!(
+            AuroraDesktopApp::desired_music_audio_action(Some(active), Some(active), true, true),
+            MusicAudioAction::PlayFromOffset
+        );
     }
 
     #[test]
